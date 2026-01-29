@@ -165,3 +165,153 @@ if st.session_state.page == "apps":
         st.info("Ajoutez, renommez ou supprimez des applications. L'ordre de la liste définit l'ordre dans le planning.")
         
         df_apps = pd.DataFrame(st.session_state.apps, columns=["Nom Application"])
+        
+        edited_apps = st.data_editor(
+            df_apps,
+            num_rows="dynamic",
+            use_container_width=True,
+            hide_index=True,
+            key="editor_apps"
+        )
+        
+        if st.button("💾 Sauvegarder les Applications"):
+            new_list = [x.upper().strip() for x in edited_apps["Nom Application"].tolist() if x]
+            st.session_state.apps = new_list
+            st.success("✅ Liste mise à jour !")
+
+# --- VUE 2 : GESTION DES ÉVÉNEMENTS (PUBLIC) ---
+elif st.session_state.page == "events":
+    st.title("📝 Gestion des Événements")
+    
+    if not st.session_state.apps:
+        st.warning("⚠️ Aucune application n'existe.")
+    else:
+        st.caption("Modifiez directement les lignes ci-dessous.")
+        
+        if st.session_state.events:
+            df_evts = pd.DataFrame(st.session_state.events)
+            # Correction Date : Conversion explicite
+            if not df_evts.empty:
+                df_evts["d1"] = pd.to_datetime(df_evts["d1"]).dt.date
+                df_evts["d2"] = pd.to_datetime(df_evts["d2"]).dt.date
+        else:
+            df_evts = pd.DataFrame(columns=["app", "env", "type", "d1", "d2", "comment"])
+
+        col_config = {
+            "app": st.column_config.SelectboxColumn("App", options=st.session_state.apps, required=True),
+            "env": st.column_config.SelectboxColumn("Env", options=["PROD", "PRÉPROD", "RECETTE"], required=True),
+            "type": st.column_config.SelectboxColumn("Type", options=["MEP", "INCIDENT", "MAINTENANCE", "TEST", "MORATOIRE"], required=True),
+            "d1": st.column_config.DateColumn("Début", required=True),
+            "d2": st.column_config.DateColumn("Fin", required=True),
+            "comment": st.column_config.TextColumn("Détails")
+        }
+
+        edited_evts = st.data_editor(
+            df_evts,
+            num_rows="dynamic",
+            use_container_width=True,
+            column_config=col_config,
+            hide_index=True,
+            key="editor_events"
+        )
+
+        if st.button("💾 Sauvegarder les Événements"):
+            cleaned = []
+            for _, row in edited_evts.iterrows():
+                if row["app"] and row["d1"] and row["d2"]:
+                    cleaned.append({
+                        "app": row["app"], "env": row["env"], "type": row["type"],
+                        "d1": row["d1"], "d2": row["d2"], "comment": row["comment"]
+                    })
+            st.session_state.events = cleaned
+            st.success("✅ Sauvegardé !")
+
+# --- VUE 3 : PLANNING VISUEL ---
+elif st.session_state.page == "planning":
+    st.title("📅 Planning Visuel 2026")
+    env_selected = st.radio("Secteur :", ["PROD", "PRÉPROD", "RECETTE"], horizontal=True)
+
+    months = ["Janvier","Février","Mars","Avril","Mai","Juin","Juillet","Août","Septembre","Octobre","Novembre","Décembre"]
+    tabs = st.tabs(months)
+
+    for i, tab in enumerate(tabs):
+        with tab:
+            year = 2026
+            month = i + 1
+            nb_days = calendar.monthrange(year, month)[1]
+            dates = [date(year, month, d) for d in range(1, nb_days + 1)]
+
+            if not st.session_state.apps:
+                st.info("Planning vide.")
+                continue
+
+            apps = st.session_state.apps
+
+            html = '<div class="planning-wrap"><table class="planning-table">'
+            html += '<thead><tr><th class="app-header">Application</th>'
+            for d in dates:
+                day_letter = ["L", "M", "M", "J", "V", "S", "D"][d.weekday()]
+                html += f'<th>{d.day}<br><small>{day_letter}</small></th>'
+            html += '</tr></thead><tbody>'
+
+            for app in apps:
+                html += f'<tr><td class="app-name">{app}</td>'
+                for d in dates:
+                    classes = []
+                    content = ""
+                    tooltip = ""
+                    
+                    if d.weekday() >= 5: classes.append("weekend")
+                    if d in JOURS_FERIES_2026:
+                        classes.append("ferie")
+                        if not content: content = "🎉"
+
+                    found_ev = None
+                    for ev in st.session_state.events:
+                        if ev["app"] == app and ev["env"] == env_selected:
+                            ev_d1 = ev["d1"] if isinstance(ev["d1"], date) else pd.to_datetime(ev["d1"]).date()
+                            ev_d2 = ev["d2"] if isinstance(ev["d2"], date) else pd.to_datetime(ev["d2"]).date()
+                            if ev_d1 <= d <= ev_d2:
+                                found_ev = ev
+                                break
+                    
+                    if found_ev:
+                        type_cls = ""
+                        if found_ev["type"] == "MEP": type_cls = "mep"
+                        elif found_ev["type"] == "INCIDENT": type_cls = "inc"
+                        elif found_ev["type"] == "MAINTENANCE": type_cls = "mai"
+                        elif found_ev["type"] == "TEST": type_cls = "test"
+                        elif found_ev["type"] == "MORATOIRE": type_cls = "mor"
+                        
+                        short_txt = found_ev["type"][:3]
+                        content = f'<div class="event-cell {type_cls}">{short_txt}</div>'
+                        
+                        ev_d1 = found_ev["d1"] if isinstance(found_ev["d1"], date) else pd.to_datetime(found_ev["d1"]).date()
+                        ev_d2 = found_ev["d2"] if isinstance(found_ev["d2"], date) else pd.to_datetime(found_ev["d2"]).date()
+                        duree = (ev_d2 - ev_d1).days + 1
+                        
+                        tooltip = f"""
+                        <div class="tooltip-content">
+                            <span class="tooltip-label">📱 App:</span> {found_ev['app']}<br>
+                            <span class="tooltip-label">🌐 Env:</span> {found_ev['env']}<br>
+                            <span class="tooltip-label">🏷️ Type:</span> {found_ev['type']}<br>
+                            <span class="tooltip-label">📅 Date:</span> {ev_d1.strftime('%d/%m')} au {ev_d2.strftime('%d/%m')}<br>
+                            <span class="tooltip-label">⏱️ Durée:</span> {duree}j<br>
+                            <span class="tooltip-label">💬 Note:</span> {found_ev['comment'] if found_ev['comment'] else '-'}
+                        </div>
+                        """
+                    td_cls = " ".join(classes)
+                    html += f'<td class="{td_cls}">{content}{tooltip}</td>'
+                html += '</tr>'
+            html += '</tbody></table></div>'
+            st.markdown(html, unsafe_allow_html=True)
+            
+            st.markdown("""
+            <div style="display:flex; gap:15px; font-size:12px; margin-top:0px; color:#64748b;">
+                <span><span style="color:#0070C0">■</span> MEP</span>
+                <span><span style="color:#FF0000">■</span> INCIDENT</span>
+                <span><span style="color:#FFC000">■</span> MAINTENANCE</span>
+                <span><span style="color:#e2e8f0">■</span> Week-End</span>
+                <span><span style="color:#FFE6F0">■</span> Férié</span>
+            </div>
+            """, unsafe_allow_html=True)
