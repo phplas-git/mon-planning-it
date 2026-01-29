@@ -4,6 +4,7 @@ import calendar
 from datetime import date, datetime
 from supabase import create_client, Client
 import time
+import holidays # <--- Nouvelle librairie pour les jours fériés
 
 # ==================================================
 # 1. CONFIGURATION & CONNEXION DB
@@ -71,13 +72,6 @@ def save_events_db(event_list):
 TODAY = date.today()
 MONTHS_FR = ["Janvier","Février","Mars","Avril","Mai","Juin","Juillet","Août","Septembre","Octobre","Novembre","Décembre"]
 
-def get_holidays(year):
-    # Liste simplifiée pour l'exemple (peut être automatisée avec la lib holidays)
-    return [
-        date(year, 1, 1), date(year, 5, 1), date(year, 5, 8), date(year, 7, 14), 
-        date(year, 8, 15), date(year, 11, 1), date(year, 11, 11), date(year, 12, 25)
-    ]
-
 # State Management
 if "data_loaded" not in st.session_state:
     an, af, ed = load_data()
@@ -120,8 +114,10 @@ with st.sidebar:
     if st.button("📱 Gérer Applications", use_container_width=True): st.session_state.page = "apps"; st.rerun()
     st.divider()
     
-    # SÉLECTEUR D'ANNÉE
-    selected_year = st.selectbox("Année de consultation", [2025, 2026, 2027, 2028], index=1)
+    # SÉLECTEUR D'ANNÉE - Par défaut sur l'année en cours
+    current_year_idx = 1 # Correspond à 2026 dans la liste ci-dessous
+    selected_year = st.selectbox("Année de consultation", [2025, 2026, 2027, 2028, 2029], 
+                                 index=[2025, 2026, 2027, 2028, 2029].index(TODAY.year))
     
     st.divider()
     if st.button("🔄 Recharger depuis Cloud"): del st.session_state.data_loaded; st.rerun()
@@ -165,9 +161,7 @@ elif st.session_state.page == "events":
             "h2": st.column_config.TextColumn("H. Fin", default="23:59"),
         }
 
-        # ON MASQUE LES COLONNES TECHNIQUES (id et created_at)
         cols_to_show = ["app", "env", "type", "d1", "d2", "h1", "h2", "comment"]
-        # On vérifie si les colonnes existent avant de filtrer
         existing_cols = [c for c in cols_to_show if c in df_evts.columns]
         
         edited_evts = st.data_editor(df_evts[existing_cols], num_rows="dynamic", use_container_width=True, hide_index=True, column_config=col_config, key="ed_evts")
@@ -193,14 +187,16 @@ elif st.session_state.page == "planning":
     st.title(f"📅 Planning Visuel {selected_year}")
     env_sel = st.radio("Secteur :", ["PROD", "PRÉPROD", "RECETTE"], horizontal=True)
     
-    # FOCUS AUTOMATIQUE SUR LE MOIS EN COURS (Seulement si on est dans l'année en cours)
-    default_tab_index = TODAY.month - 1 if TODAY.year == selected_year else 0
+    # Récupération automatique des jours fériés français
+    fr_holidays = holidays.France(years=selected_year)
+    
+    # FOCUS SUR LE MOIS ACTUEL
     tabs = st.tabs(MONTHS_FR)
-
-    holidays = get_holidays(selected_year)
-
+    
+    # Astuce pour ouvrir le mois actuel par défaut via JavaScript/CSS est complexe dans st.tabs,
+    # On affiche donc une info si on est sur le "mauvais" mois au chargement initial.
+    
     for i, tab in enumerate(tabs):
-        # On force l'affichage du mois actuel
         with tab:
             m = i + 1
             days_in_month = calendar.monthrange(selected_year, m)[1]
@@ -219,15 +215,20 @@ elif st.session_state.page == "planning":
                     cls, cnt, ttp = [], "", ""
                     if d == TODAY: cls.append("today-col")
                     if d.weekday() >= 5: cls.append("weekend")
-                    if d in holidays: cls.append("ferie"); cnt = "🎉"
+                    
+                    # Vérification jour férié automatique
+                    if d in fr_holidays:
+                        cls.append("ferie")
+                        cnt = "🎉"
+                        holiday_name = fr_holidays.get(d)
+                    else:
+                        holiday_name = None
                     
                     found = next((e for e in st.session_state.events if e["app"] == app and e["env"] == env_sel and e["d1"] <= d <= e["d2"]), None)
                     if found:
                         t_cls = found["type"][:3].lower() if found["type"] != "MAINTENANCE" else "mai"
                         if found["type"] == "TEST": t_cls = "test"
                         cnt = f'<div class="event-cell {t_cls}">{found["type"][:3].upper()}</div>'
-                        
-                        # CALCUL DE LA DURÉE
                         delta = (found["d2"] - found["d1"]).days + 1
                         
                         ttp = f"""<div class="tooltip-content">
@@ -235,7 +236,13 @@ elif st.session_state.page == "planning":
                             <span class="tooltip-label">🕒 Heures:</span>De {found.get('h1','00:00')} à {found.get('h2','23:59')}<br>
                             <span class="tooltip-label">📅 Dates:</span>{found["d1"].strftime("%d/%m")} au {found["d2"].strftime("%d/%m")}<br>
                             <span class="tooltip-label">⏱️ Durée:</span>{delta} j<br>
+                            {"<span class='tooltip-label'>🎊 Férié :</span>" + holiday_name + "<br>" if holiday_name else ""}
                             <span class="tooltip-label">💬 Note:</span>{found["comment"] if found["comment"] else "-"}
+                        </div>"""
+                    elif holiday_name:
+                        # Tooltip spécifique pour les jours fériés sans événement
+                        ttp = f"""<div class="tooltip-content">
+                            <span class="tooltip-label">🎊 Jour Férié :</span>{holiday_name}
                         </div>"""
                     
                     html += f'<td class="{" ".join(cls)}">{cnt}{ttp}</td>'
