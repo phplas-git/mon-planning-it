@@ -17,9 +17,6 @@ if "apps" not in st.session_state:
 if "events" not in st.session_state:
     st.session_state.events = []
 
-if "selected_cell" not in st.session_state:
-    st.session_state.selected_cell = None
-
 # ==================================================
 # SIDEBAR
 # ==================================================
@@ -62,7 +59,6 @@ with st.sidebar:
     if st.button("Tout effacer"):
         st.session_state.apps = []
         st.session_state.events = []
-        st.session_state.selected_cell = None
         st.rerun()
 
 # ==================================================
@@ -128,7 +124,7 @@ for i, tab in enumerate(tabs):
             if col != "App":
                 column_config[col] = st.column_config.TextColumn(col, width="small")
 
-        # ---- Data editor SANS style (c'est ça le problème !)
+        # ---- Data editor
         key_editor = f"editor_{env_selected}_{i}"
 
         edited_df = st.data_editor(
@@ -137,63 +133,112 @@ for i, tab in enumerate(tabs):
             column_config=column_config,
             key=key_editor,
             use_container_width=True,
-            disabled=True  # Désactive l'édition mais permet la sélection
+            disabled=True,
+            on_change=None
         )
 
-        # ---- Affichage du style avec HTML pour visualisation
-        st.markdown("---")
+        # ---- DEBUG: Afficher l'état de la sélection
+        editor_state = st.session_state.get(key_editor)
         
-        # Générer le HTML stylé pour affichage
-        html = "<table style='width:100%; border-collapse: collapse; font-size: 12px;'>"
-        html += "<tr>"
-        for col in df.columns:
-            html += f"<th style='border: 1px solid #ddd; padding: 8px; background-color: #f2f2f2;'>{col}</th>"
-        html += "</tr>"
+        st.write("DEBUG - État du data_editor:", editor_state)  # Pour debug
         
-        for idx, row in df.iterrows():
-            html += "<tr>"
-            for col in df.columns:
-                val = row[col]
-                style = get_cell_style(val)
-                html += f"<td style='border: 1px solid #ddd; padding: 8px; text-align: center; {style}'>{val}</td>"
-            html += "</tr>"
-        html += "</table>"
+        # ---- Lecture de la sélection (plusieurs méthodes)
+        selected_cells = None
+        selected_rows = None
         
-        with st.expander("📊 Vue stylée du planning"):
-            st.markdown(html, unsafe_allow_html=True)
+        if editor_state:
+            # Méthode 1: selected_cells
+            if isinstance(editor_state, dict) and "selected_cells" in editor_state:
+                selected_cells = editor_state["selected_cells"]
+            
+            # Méthode 2: selection avec rows
+            if isinstance(editor_state, dict) and "selection" in editor_state:
+                selection = editor_state["selection"]
+                if "rows" in selection and selection["rows"]:
+                    selected_rows = list(selection["rows"])
 
-        # ---- Lecture de la sélection
-        selection = st.session_state.get(key_editor, {})
-        
-        if "selection" in selection and selection["selection"]["rows"]:
-            row_idx = list(selection["selection"]["rows"])[0]
+        # ---- Affichage des détails si sélection
+        if selected_cells and len(selected_cells) > 0:
+            cell = selected_cells[0]
+            row_idx = cell["row"]
+            col_name = cell["column"]
+            
+            st.write(f"DEBUG - Cellule sélectionnée: ligne {row_idx}, colonne {col_name}")  # Pour debug
+
+            if col_name != "App":
+                sel_app = df.iloc[row_idx]["App"]
+                sel_day = int(col_name)
+                sel_date = date(year, month, sel_day)
+
+                st.divider()
+                st.subheader(f"🔍 Détail : {sel_app} — {sel_day} {months[i]} {year}")
+
+                # Rechercher l'événement correspondant
+                found = False
+                for ev in st.session_state.events:
+                    if ev["app"] == sel_app and ev["env"] == env_selected:
+                        if ev["d1"] <= sel_date <= ev["d2"]:
+                            found = True
+                            with st.container(border=True):
+                                col1, col2 = st.columns(2)
+                                
+                                with col1:
+                                    st.metric("📱 Application", ev["app"])
+                                    st.metric("🌐 Environnement", ev["env"])
+                                    st.metric("🏷️ Type", ev["type"])
+                                
+                                with col2:
+                                    st.metric("📅 Date début", ev['d1'].strftime('%d/%m/%Y'))
+                                    st.metric("📅 Date fin", ev['d2'].strftime('%d/%m/%Y'))
+                                    duree = (ev['d2'] - ev['d1']).days + 1
+                                    st.metric("⏱️ Durée", f"{duree} jour(s)")
+                                
+                                if ev["comment"]:
+                                    st.markdown("**💬 Commentaire :**")
+                                    st.info(ev["comment"])
+                                else:
+                                    st.caption("_Aucun commentaire_")
+
+                if not found:
+                    st.info("Aucun événement prévu ce jour-là.")
+                    
+        elif selected_rows and len(selected_rows) > 0:
+            row_idx = selected_rows[0]
             sel_app = df.iloc[row_idx]["App"]
             
             st.divider()
-            st.subheader(f"🔍 Événements pour {sel_app} - {months[i]}")
+            st.subheader(f"🔍 Événements pour {sel_app} - {months[i]} {year}")
 
             events_found = [
                 ev for ev in st.session_state.events
                 if ev["app"] == sel_app and ev["env"] == env_selected
-                and (ev["d1"].month == month or ev["d2"].month == month)
+                and ((ev["d1"].year == year and ev["d1"].month == month) or 
+                     (ev["d2"].year == year and ev["d2"].month == month) or
+                     (ev["d1"] <= date(year, month, 1) and ev["d2"] >= date(year, month, nb_days)))
             ]
 
             if events_found:
                 for ev in events_found:
                     with st.container(border=True):
-                        cols = st.columns([1, 3])
-                        with cols[0]:
-                            st.metric("TYPE", ev["type"])
-                        with cols[1]:
-                            st.markdown(
-                                f"📅 **Du {ev['d1'].strftime('%d/%m/%Y')} "
-                                f"au {ev['d2'].strftime('%d/%m/%Y')}**"
-                            )
+                        col1, col2 = st.columns(2)
+                        
+                        with col1:
+                            st.metric("📱 Application", ev["app"])
+                            st.metric("🌐 Environnement", ev["env"])
+                            st.metric("🏷️ Type", ev["type"])
+                        
+                        with col2:
+                            st.metric("📅 Date début", ev['d1'].strftime('%d/%m/%Y'))
+                            st.metric("📅 Date fin", ev['d2'].strftime('%d/%m/%Y'))
+                            duree = (ev['d2'] - ev['d1']).days + 1
+                            st.metric("⏱️ Durée", f"{duree} jour(s)")
+                        
                         if ev["comment"]:
+                            st.markdown("**💬 Commentaire :**")
                             st.info(ev["comment"])
                         else:
-                            st.caption("Pas de commentaire.")
+                            st.caption("_Aucun commentaire_")
             else:
-                st.caption("Aucun événement ce mois-ci.")
+                st.info("Aucun événement ce mois-ci.")
         else:
-            st.caption("👆 Sélectionnez une ligne (cliquez sur le numéro de ligne à gauche) pour voir les détails.")
+            st.caption("👆 Cliquez sur une cellule du tableau pour voir les détails de l'événement.")
