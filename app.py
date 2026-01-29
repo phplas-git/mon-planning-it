@@ -6,53 +6,51 @@ from datetime import date, timedelta
 # --- 1. CONFIGURATION ---
 st.set_page_config(page_title="Planning IT Pro", layout="wide")
 
-# Initialisation robuste
-if 'events' not in st.session_state: st.session_state.events = []
-if 'apps' not in st.session_state: st.session_state.apps = []
+# Initialisation ultra-sécurisée
+if 'events' not in st.session_state:
+    st.session_state.events = []
+if 'apps' not in st.session_state:
+    st.session_state.apps = []
 
 # --- 2. BARRE LATÉRALE ---
 with st.sidebar:
     st.title("⚙️ Administration")
     
-    # Section Ajout App - Sortie du expander pour plus de stabilité
-    st.subheader("🚀 Gérer les Applications")
-    new_app = st.text_input("Nom de l'appli (ex: PRAC)", key="input_new_app").upper()
-    if st.button("Ajouter l'Application"):
-        if new_app:
-            if new_app not in st.session_state.apps:
-                st.session_state.apps.append(new_app)
-                st.success(f"Appli {new_app} ajoutée !")
+    # AJOUT D'APP : Utilisation d'un formulaire dédié pour isoler l'action
+    st.subheader("🚀 Applications")
+    with st.form("form_new_app", clear_on_submit=True):
+        new_app_name = st.text_input("Nom de l'appli").upper().strip()
+        add_btn = st.form_submit_button("Ajouter")
+        if add_btn and new_app_name:
+            if new_app_name not in st.session_state.apps:
+                st.session_state.apps.append(new_app_name)
                 st.rerun()
             else:
-                st.warning("Cette application existe déjà.")
-        else:
-            st.error("Veuillez saisir un nom.")
+                st.warning("Existe déjà")
 
     st.divider()
     
+    # AJOUT D'ÉVÉNEMENT
     st.subheader("➕ Nouvel Événement")
-    # On sécurise la liste des options
-    app_options = sorted(st.session_state.apps) if st.session_state.apps else []
+    # Liste de choix sécurisée
+    current_options = sorted(st.session_state.apps)
     
-    with st.form("add_event", clear_on_submit=True):
-        f_app = st.selectbox("Application", options=app_options if app_options else ["Aucune application"])
+    with st.form("form_event", clear_on_submit=True):
+        f_app = st.selectbox("Application", options=current_options if current_options else ["Veuillez ajouter une app"])
         f_env = st.selectbox("Environnement", ["PROD", "PRÉPROD", "RECETTE"])
         f_type = st.selectbox("Type", ["MEP", "INCIDENT", "MAINTENANCE", "TEST", "MORATOIRE"])
-        f_comment = st.text_area("Commentaire / Détails")
+        f_comment = st.text_area("Commentaire")
         col1, col2 = st.columns(2)
         f_d1 = col1.date_input("Début")
         f_d2 = col2.date_input("Fin")
-        submit = st.form_submit_button("Enregistrer l'événement")
         
-        if submit:
-            if not st.session_state.apps:
-                st.error("Ajoutez d'abord une application !")
-            else:
+        if st.form_submit_button("Enregistrer"):
+            if current_options:
                 st.session_state.events.append({
                     'app': f_app, 'env': f_env, 'type': f_type, 
                     'd1': f_d1, 'd2': f_d2, 'comment': f_comment
                 })
-                st.success("Événement enregistré !")
+                st.success("Enregistré !")
                 st.rerun()
 
 # --- 3. INTERFACE PRINCIPALE ---
@@ -70,78 +68,65 @@ for i, tab in enumerate(tabs):
         dates = [date(year, month_num, d) for d in range(1, num_days + 1)]
         
         if not st.session_state.apps:
-            st.info("👋 Bienvenue ! Commencez par ajouter une application dans la barre latérale à gauche.")
+            st.info("💡 Le planning est vide. Ajoutez une application dans la barre latérale pour commencer.")
         else:
-            # On trie une seule fois ici pour tout le bloc
-            current_apps = sorted(st.session_state.apps)
+            # On trie les apps pour l'affichage
+            apps_list = sorted(st.session_state.apps)
             
-            grid_data = {"App": current_apps}
+            # Préparation des données de la grille
+            grid = {"App": apps_list}
             for d in dates:
-                col_name = str(d.day)
-                grid_data[col_name] = []
-                for app in current_apps:
-                    val = ""
-                    if d.weekday() >= 5: val = "•"
+                col = str(d.day)
+                grid[col] = []
+                for app in apps_list:
+                    status = ""
+                    if d.weekday() >= 5: status = "•" # Marqueur Weekend
+                    
+                    # Recherche d'un événement
                     for ev in st.session_state.events:
                         if ev['app'] == app and ev['env'] == env_selected:
                             if ev['d1'] <= d <= ev['d2']:
-                                val = ev['type'][:3]
-                    grid_data[col_name].append(val)
+                                status = ev['type'][:3] # MEP, INC...
+                    grid[col].append(status)
             
-            df = pd.DataFrame(grid_data)
+            df_display = pd.DataFrame(grid)
 
-            # Style (Version compatible Pandas 2.x)
-            def color_excel(val):
-                if val == "MEP": return "background-color: #0070C0; color: white; font-weight: bold"
-                if val == "INC": return "background-color: #FF0000; color: white; font-weight: bold"
-                if val == "MAI": return "background-color: #FFC000; color: black; font-weight: bold"
-                if val == "TES": return "background-color: #00B050; color: white; font-weight: bold"
-                if val == "MOR": return "background-color: #9600C8; color: white; font-weight: bold"
-                if val == "•": return "background-color: #f1f3f4; color: transparent"
-                return ""
-
-            # Config Colonnes
-            config_cols = {"App": st.column_config.TextColumn("Application", width="medium", pinned=True)}
+            # Style des colonnes
+            c_config = {"App": st.column_config.TextColumn("Application", width="medium", pinned=True)}
             for d in dates:
-                config_cols[str(d.day)] = st.column_config.TextColumn(str(d.day), width=35)
+                c_config[str(d.day)] = st.column_config.TextColumn(str(d.day), width=35)
 
-            # Affichage
-            result = st.dataframe(
-                df.style.map(color_excel),
+            # Style des couleurs
+            def apply_style(val):
+                colors = {
+                    "MEP": "background-color: #0070C0; color: white; font-weight: bold",
+                    "INC": "background-color: #FF0000; color: white; font-weight: bold",
+                    "MAI": "background-color: #FFC000; color: black; font-weight: bold",
+                    "TES": "background-color: #00B050; color: white; font-weight: bold",
+                    "MOR": "background-color: #9600C8; color: white; font-weight: bold",
+                    "•": "background-color: #f1f3f4; color: transparent"
+                }
+                return colors.get(val, "")
+
+            # AFFICHAGE DU TABLEAU
+            sel = st.dataframe(
+                df_display.style.map(apply_style),
                 use_container_width=True,
                 hide_index=True,
-                column_config=config_cols,
+                column_config=c_config,
                 on_select="rerun",
                 selection_mode=["single_row", "single_column"]
             )
 
-            # --- 4. LOGIQUE DE DÉTAILS ---
-            selected_rows = result.selection.rows
-            selected_cols = result.selection.columns
+            # --- 4. LOGIQUE DE CLIC SUR CELLULE ---
+            s_rows = sel.selection.rows
+            s_cols = sel.selection.columns
 
-            if selected_rows and selected_cols:
-                row_idx = selected_rows[0]
-                col_name = selected_cols[0]
+            if s_rows and s_cols:
+                row_idx = s_rows[0]
+                col_name = s_cols[0]
 
                 if col_name != "App":
-                    selected_app = current_apps[row_idx]
-                    day_clicked = int(col_name)
-                    target_date = date(year, month_num, day_clicked)
-                    
-                    st.divider()
-                    st.subheader(f"🔍 Détails : {selected_app} ({day_clicked} {mois_noms[i]})")
-                    
-                    matches = [e for e in st.session_state.events if e['app'] == selected_app 
-                               and e['env'] == env_selected 
-                               and e['d1'] <= target_date <= e['d2']]
-                    
-                    if matches:
-                        for e in matches:
-                            with st.container(border=True):
-                                c1, c2 = st.columns([1, 4])
-                                c1.metric("TYPE", e['type'])
-                                c2.markdown(f"**Période :** du {e['d1'].strftime('%d/%m')} au {e['d2'].strftime('%d/%m')}")
-                                if e['comment']:
-                                    c2.info(f"**Commentaire :** {e['comment']}")
-                    else:
-                        st.write("Rien de prévu ce jour-là.")
+                    selected_app = apps_list[row_idx]
+                    day_num = int(col_name)
+                    clicked_date = date(year, month_num,
