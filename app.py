@@ -77,64 +77,147 @@ if "data_loaded" not in st.session_state:
 if "page" not in st.session_state: st.session_state.page = "planning"
 
 # ==================================================
-# 2. CSS DESIGN (CORRIGÉ)
+# 2. CSS DESIGN (OPTIMISÉ AVEC SCROLL)
 # ==================================================
 st.markdown("""
 <style>
-    .planning-wrap { overflow-x: auto; padding-bottom: 20px; }
-    .planning-table { width: 100%; border-collapse: separate; border-spacing: 0; background-color: #fff; border: 1px solid #e2e8f0; border-radius: 8px; font-family: sans-serif; font-size: 12px; table-layout: fixed; }
+    /* Container avec scroll vertical et horizontal */
+    .planning-wrap { 
+        overflow: auto; 
+        max-height: 70vh; 
+        padding-bottom: 20px; 
+        position: relative;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+    }
     
-    .planning-table th { background-color: #f8fafc; color: #334155; padding: 10px 2px; text-align: center; border-right: 1px solid #e2e8f0; border-bottom: 2px solid #cbd5e1; }
+    .planning-table { 
+        width: 100%; 
+        border-collapse: separate; 
+        border-spacing: 0; 
+        background-color: #fff; 
+        font-family: sans-serif; 
+        font-size: 13px;
+    }
     
-    .planning-table th.app-header { text-align: left; padding-left: 15px; width: 150px; position: sticky; left: 0; z-index: 40; background-color: #f1f5f9 !important; border-right: 2px solid #cbd5e1; }
-    .planning-table td.app-name { background-color: #f8fafc !important; color: #0f172a !important; font-weight: 600; text-align: left; padding-left: 15px; position: sticky; left: 0; z-index: 30; border-right: 2px solid #cbd5e1; }
+    /* En-têtes STICKY (fixes au scroll vertical) */
+    .planning-table thead {
+        position: sticky;
+        top: 0;
+        z-index: 50;
+    }
     
-    .planning-table td { text-align: center; padding: 0; height: 38px; border-right: 1px solid #f1f5f9; border-bottom: 1px solid #f1f5f9; position: relative; background-color: #ffffff; }
+    .planning-table th { 
+        background-color: #f8fafc; 
+        color: #334155; 
+        padding: 12px 4px; 
+        text-align: center; 
+        border-right: 1px solid #e2e8f0; 
+        border-bottom: 2px solid #cbd5e1;
+        font-weight: 600;
+        white-space: nowrap;
+    }
+    
+    /* Colonne Application STICKY (fixe au scroll horizontal) */
+    .planning-table th.app-header { 
+        text-align: left; 
+        padding-left: 15px; 
+        width: 150px;
+        min-width: 150px;
+        position: sticky; 
+        left: 0; 
+        z-index: 60; 
+        background-color: #f1f5f9 !important; 
+        border-right: 2px solid #cbd5e1;
+        box-shadow: 2px 0 4px rgba(0,0,0,0.05);
+    }
+    
+    .planning-table td.app-name { 
+        background-color: #f8fafc !important; 
+        color: #0f172a !important; 
+        font-weight: 600; 
+        text-align: left; 
+        padding: 12px 15px;
+        position: sticky; 
+        left: 0; 
+        z-index: 40; 
+        border-right: 2px solid #cbd5e1;
+        box-shadow: 2px 0 4px rgba(0,0,0,0.05);
+    }
+    
+    /* Cellules normales */
+    .planning-table td { 
+        text-align: center; 
+        padding: 0; 
+        height: 42px;
+        min-width: 35px;
+        border-right: 1px solid #f1f5f9; 
+        border-bottom: 1px solid #f1f5f9; 
+        position: relative; 
+        background-color: #ffffff; 
+    }
 
     /* PRIORITÉS COULEURS */
-    .today-col { background-color: #eff6ff !important; box-shadow: inset 0 0 0 1px #3b82f6 !important; }
-    th.today-header { background-color: #3b82f6 !important; color: white !important; }
+    .today-col { 
+        background-color: #eff6ff !important; 
+        box-shadow: inset 0 0 0 2px #3b82f6 !important; 
+    }
+    th.today-header { 
+        background-color: #3b82f6 !important; 
+        color: white !important; 
+        font-weight: 700;
+    }
     
     .weekend { background-color: #f1f5f9 !important; }
     .ferie { background-color: #FFE6F0 !important; }
 
-    .event-cell { display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; color: white; font-weight: bold; font-size: 10px; line-height: 1; position: relative; z-index: 5; cursor: pointer; }
+    /* Événements */
+    .event-cell { 
+        display: flex; 
+        align-items: center; 
+        justify-content: center; 
+        width: 100%; 
+        height: 100%; 
+        color: white; 
+        font-weight: bold; 
+        font-size: 11px; 
+        line-height: 1; 
+        position: relative; 
+        z-index: 5; 
+        cursor: pointer; 
+    }
     .mep { background-color: #0070C0; } 
     .inc { background-color: #FF0000; } 
     .mai { background-color: #FFC000; color: black; } 
     .test { background-color: #00B050; } 
     .mor { background-color: #9600C8; }
     
-    /* TOOLTIP CORRIGÉ */
+    /* TOOLTIP */
     .tooltip-wrapper { position: relative; width: 100%; height: 100%; }
     .tooltip-content { 
         visibility: hidden; 
-        width: 280px; 
+        width: 300px; 
         background-color: #1e293b; 
         color: #fff; 
         border-radius: 6px; 
-        padding: 12px; 
-        position: absolute; 
-        top: 100%; 
-        left: 50%; 
-        transform: translateX(-50%); 
-        margin-top: 5px;
+        padding: 14px; 
+        position: fixed;
         opacity: 0; 
         transition: opacity 0.2s, visibility 0.2s; 
-        box-shadow: 0 10px 15px rgba(0,0,0,0.3); 
-        font-size: 11px; 
-        z-index: 1000; 
+        box-shadow: 0 10px 25px rgba(0,0,0,0.4); 
+        font-size: 12px; 
+        z-index: 9999; 
         pointer-events: none; 
         text-align: left;
-        line-height: 1.6;
+        line-height: 1.7;
     }
     .tooltip-content::before { 
         content: ""; 
         position: absolute; 
         bottom: 100%; 
         left: 50%; 
-        margin-left: -5px; 
-        border-width: 5px; 
+        margin-left: -6px; 
+        border-width: 6px; 
         border-style: solid; 
         border-color: transparent transparent #1e293b transparent; 
     }
@@ -146,7 +229,28 @@ st.markdown("""
         font-weight: bold; 
         color: #4ade80; 
         display: inline-block;
-        min-width: 70px;
+        min-width: 75px;
+    }
+    
+    /* Amélioration visuelle */
+    .planning-table tbody tr:hover td:not(.app-name) {
+        background-color: #fafafa;
+    }
+    
+    /* Scroll bars personnalisées */
+    .planning-wrap::-webkit-scrollbar {
+        width: 10px;
+        height: 10px;
+    }
+    .planning-wrap::-webkit-scrollbar-track {
+        background: #f1f5f9;
+    }
+    .planning-wrap::-webkit-scrollbar-thumb {
+        background: #cbd5e1;
+        border-radius: 5px;
+    }
+    .planning-wrap::-webkit-scrollbar-thumb:hover {
+        background: #94a3b8;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -281,13 +385,13 @@ elif st.session_state.page == "planning":
                         dur = (ev["d2"] - ev["d1"]).days + 1
                         comment_text = str(ev.get('comment', '-')).replace('"', '&quot;').replace("'", '&#39;')
                         
-                        tooltip_html = f'''<div class="tooltip-content">
-<span class="tooltip-label">App:</span> {ev['app']}<br>
-<span class="tooltip-label">Type:</span> {ev['type']}<br>
-<span class="tooltip-label">Heures:</span> {ev.get('h1','00:00')} - {ev.get('h2','23:59')}<br>
-<span class="tooltip-label">Dates:</span> {ev['d1'].strftime('%d/%m')} au {ev['d2'].strftime('%d/%m')}<br>
-<span class="tooltip-label">Durée:</span> {dur} jour(s)<br>
-{f'<span class="tooltip-label">Férié:</span> {h_name}<br>' if h_name else ''}<span class="tooltip-label">Note:</span> {comment_text}
+                        tooltip_html = f'''<div class="tooltip-content" style="top: {42}px; left: 50%; transform: translateX(-50%);">
+<strong style="color:#60a5fa; font-size:13px; display:block; margin-bottom:8px;">📋 {ev['type']}</strong>
+<span class="tooltip-label">📱 App:</span> {ev['app']}<br>
+<span class="tooltip-label">⏰ Heures:</span> {ev.get('h1','00:00')} - {ev.get('h2','23:59')}<br>
+<span class="tooltip-label">📅 Dates:</span> {ev['d1'].strftime('%d/%m')} au {ev['d2'].strftime('%d/%m')}<br>
+<span class="tooltip-label">⏱️ Durée:</span> {dur} jour(s)<br>
+{f'<span class="tooltip-label">🎉 Férié:</span> {h_name}<br>' if h_name else ''}<span class="tooltip-label">💬 Note:</span> {comment_text if comment_text != '-' else '<i>Aucune</i>'}
 </div>'''
                     
                     # Assemblage de la cellule
