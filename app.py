@@ -9,6 +9,23 @@ from datetime import date
 st.set_page_config(page_title="Planning IT Pro", layout="wide")
 
 # ==================================================
+# JOURS FÉRIÉS 2026 (France)
+# ==================================================
+JOURS_FERIES_2026 = [
+    date(2026, 1, 1),   # Nouvel an
+    date(2026, 4, 6),   # Lundi de Pâques
+    date(2026, 5, 1),   # Fête du travail
+    date(2026, 5, 8),   # Victoire 1945
+    date(2026, 5, 14),  # Ascension
+    date(2026, 5, 25),  # Lundi de Pentecôte
+    date(2026, 7, 14),  # Fête nationale
+    date(2026, 8, 15),  # Assomption
+    date(2026, 11, 1),  # Toussaint
+    date(2026, 11, 11), # Armistice
+    date(2026, 12, 25), # Noël
+]
+
+# ==================================================
 # SESSION STATE
 # ==================================================
 if "apps" not in st.session_state:
@@ -16,9 +33,6 @@ if "apps" not in st.session_state:
 
 if "events" not in st.session_state:
     st.session_state.events = []
-
-if "selected_event" not in st.session_state:
-    st.session_state.selected_event = None
 
 # ==================================================
 # SIDEBAR
@@ -62,7 +76,6 @@ with st.sidebar:
     if st.button("Tout effacer"):
         st.session_state.apps = []
         st.session_state.events = []
-        st.session_state.selected_event = None
         st.rerun()
 
 # ==================================================
@@ -78,24 +91,120 @@ months = [
 tabs = st.tabs(months)
 
 # ==================================================
-# STYLE CELLULE
+# STYLE & TOOLTIP CSS
 # ==================================================
-def get_cell_color(val):
-    colors = {
-        "MEP": "#0070C0",
-        "INC": "#FF0000",
-        "MAI": "#FFC000",
-        "TES": "#00B050",
-        "MOR": "#9600C8",
+css = """
+<style>
+    .planning-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 12px;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        table-layout: fixed;
     }
-    return colors.get(val, "#f0f0f0")
-
-def get_text_color(val):
-    if val in ["MEP", "INC", "TES", "MOR"]:
-        return "white"
-    elif val == "MAI":
-        return "black"
-    return "#d0d0d0"
+    .planning-table th {
+        border: 1px solid #ddd;
+        padding: 8px;
+        background-color: #f2f2f2;
+        font-weight: bold;
+        text-align: center;
+        font-size: 11px;
+    }
+    .planning-table th.app-header {
+        width: 120px;
+        text-align: left;
+    }
+    .planning-table td {
+        border: 1px solid #ddd;
+        padding: 6px;
+        text-align: center;
+        font-weight: bold;
+        position: relative;
+        height: 35px;
+        cursor: pointer;
+    }
+    .planning-table td.app-name {
+        text-align: left;
+        font-weight: bold;
+        background-color: #f9f9f9;
+    }
+    .planning-table td.weekend {
+        background-color: #f0f0f0;
+        color: #999;
+    }
+    .planning-table td.ferie {
+        background-color: #FFE6F0;
+    }
+    .planning-table td.mep {
+        background-color: #0070C0;
+        color: white;
+    }
+    .planning-table td.inc {
+        background-color: #FF0000;
+        color: white;
+    }
+    .planning-table td.mai {
+        background-color: #FFC000;
+        color: black;
+    }
+    .planning-table td.tes {
+        background-color: #00B050;
+        color: white;
+    }
+    .planning-table td.mor {
+        background-color: #9600C8;
+        color: white;
+    }
+    
+    /* Tooltip */
+    .tooltip {
+        position: relative;
+        display: inline-block;
+    }
+    .tooltip .tooltiptext {
+        visibility: hidden;
+        width: 300px;
+        background-color: #333;
+        color: #fff;
+        text-align: left;
+        border-radius: 6px;
+        padding: 12px;
+        position: absolute;
+        z-index: 9999;
+        bottom: 125%;
+        left: 50%;
+        margin-left: -150px;
+        opacity: 0;
+        transition: opacity 0.3s;
+        font-size: 13px;
+        line-height: 1.6;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+    }
+    .tooltip .tooltiptext::after {
+        content: "";
+        position: absolute;
+        top: 100%;
+        left: 50%;
+        margin-left: -5px;
+        border-width: 5px;
+        border-style: solid;
+        border-color: #333 transparent transparent transparent;
+    }
+    .tooltip:hover .tooltiptext {
+        visibility: visible;
+        opacity: 1;
+    }
+    .tooltip-label {
+        display: block;
+        font-weight: bold;
+        margin-top: 8px;
+        color: #4CAF50;
+    }
+    .tooltip-label:first-child {
+        margin-top: 0;
+    }
+</style>
+"""
 
 # ==================================================
 # TABLES PAR MOIS
@@ -113,150 +222,85 @@ for i, tab in enumerate(tabs):
 
         apps = sorted(st.session_state.apps)
 
-        # ---- Création du tableau HTML avec boutons
-        html = """
-        <style>
-            .planning-table {
-                width: 100%;
-                border-collapse: collapse;
-                font-size: 11px;
-                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-            }
-            .planning-table th {
-                border: 1px solid #ddd;
-                padding: 6px;
-                background-color: #f2f2f2;
-                font-weight: bold;
-                text-align: center;
-                position: sticky;
-                top: 0;
-            }
-            .planning-table td {
-                border: 1px solid #ddd;
-                padding: 4px;
-                text-align: center;
-                height: 30px;
-            }
-            .planning-table td.app-name {
-                text-align: left;
-                font-weight: bold;
-                background-color: #f9f9f9;
-            }
-        </style>
-        <table class="planning-table">
-            <tr>
-                <th>App</th>
-        """
+        # ---- Création du tableau HTML avec tooltips
+        html = css + '<table class="planning-table"><thead><tr><th class="app-header">Application</th>'
         
         # En-têtes des jours
-        for d in range(1, nb_days + 1):
-            html += f"<th>{d}</th>"
-        html += "</tr>"
+        for d in dates:
+            day_name = ["L", "M", "M", "J", "V", "S", "D"][d.weekday()]
+            html += f'<th>{d.day}<br><small>{day_name}</small></th>'
+        html += '</tr></thead><tbody>'
 
         # Lignes par application
         for app in apps:
-            html += f"<tr><td class='app-name'>{app}</td>"
+            html += f'<tr><td class="app-name">{app}</td>'
             
             for d in dates:
-                day_num = d.day
-                val = "•" if d.weekday() >= 5 else ""
-                event_id = None
+                # Déterminer le type de cellule
+                classes = []
+                cell_content = ""
+                tooltip_content = ""
                 
-                # Trouver l'événement pour cette cellule
-                for idx, ev in enumerate(st.session_state.events):
+                # Weekend
+                if d.weekday() >= 5:
+                    classes.append("weekend")
+                    cell_content = "•"
+                
+                # Jour férié
+                if d in JOURS_FERIES_2026:
+                    classes.append("ferie")
+                    if not cell_content:
+                        cell_content = "🎉"
+                
+                # Chercher un événement
+                event_found = None
+                for ev in st.session_state.events:
                     if ev["app"] == app and ev["env"] == env_selected:
                         if ev["d1"] <= d <= ev["d2"]:
-                            val = ev["type"][:3]
-                            event_id = idx
+                            event_found = ev
                             break
                 
-                bg_color = get_cell_color(val)
-                text_color = get_text_color(val)
+                if event_found:
+                    ev = event_found
+                    type_short = ev["type"][:3].upper()
+                    cell_content = type_short
+                    
+                    # Classes CSS selon le type
+                    if ev["type"] == "MEP":
+                        classes.append("mep")
+                    elif ev["type"] == "INCIDENT":
+                        classes.append("inc")
+                    elif ev["type"] == "MAINTENANCE":
+                        classes.append("mai")
+                    elif ev["type"] == "TEST":
+                        classes.append("tes")
+                    elif ev["type"] == "MORATOIRE":
+                        classes.append("mor")
+                    
+                    # Contenu du tooltip
+                    duree = (ev['d2'] - ev['d1']).days + 1
+                    tooltip_content = f'''
+                    <span class="tooltiptext">
+                        <span class="tooltip-label">📱 Application:</span> {ev["app"]}
+                        <span class="tooltip-label">🌐 Environnement:</span> {ev["env"]}
+                        <span class="tooltip-label">🏷️ Type:</span> {ev["type"]}
+                        <span class="tooltip-label">📅 Période:</span> Du {ev["d1"].strftime("%d/%m/%Y")} au {ev["d2"].strftime("%d/%m/%Y")}
+                        <span class="tooltip-label">⏱️ Durée:</span> {duree} jour(s)
+                        {f'<span class="tooltip-label">💬 Commentaire:</span> {ev["comment"]}' if ev["comment"] else ''}
+                    </span>
+                    '''
                 
-                html += f"<td style='background-color:{bg_color}; color:{text_color}; font-weight:bold;'>{val}</td>"
+                class_str = ' '.join(classes) if classes else ''
+                
+                if tooltip_content:
+                    html += f'<td class="{class_str}"><div class="tooltip">{cell_content}{tooltip_content}</div></td>'
+                else:
+                    html += f'<td class="{class_str}">{cell_content}</td>'
             
-            html += "</tr>"
+            html += '</tr>'
         
-        html += "</table>"
+        html += '</tbody></table>'
         
         st.markdown(html, unsafe_allow_html=True)
         
-        st.divider()
-        
-        # ---- Liste des événements avec boutons cliquables
-        st.subheader(f"📋 Liste des événements - {months[i]} {year}")
-        
-        events_this_month = [
-            (idx, ev) for idx, ev in enumerate(st.session_state.events)
-            if ev["env"] == env_selected
-            and ((ev["d1"].year == year and ev["d1"].month == month) or 
-                 (ev["d2"].year == year and ev["d2"].month == month) or
-                 (ev["d1"] <= date(year, month, 1) and ev["d2"] >= date(year, month, nb_days)))
-        ]
-        
-        if events_this_month:
-            cols = st.columns(min(3, len(events_this_month)))
-            
-            for col_idx, (ev_idx, ev) in enumerate(events_this_month):
-                with cols[col_idx % 3]:
-                    # Couleur du bouton selon le type
-                    type_colors = {
-                        "MEP": "🔵",
-                        "INCIDENT": "🔴",
-                        "MAINTENANCE": "🟡",
-                        "TEST": "🟢",
-                        "MORATOIRE": "🟣"
-                    }
-                    icon = type_colors.get(ev["type"], "⚪")
-                    
-                    if st.button(
-                        f"{icon} {ev['app']} - {ev['type'][:3]}",
-                        key=f"btn_{i}_{ev_idx}",
-                        use_container_width=True
-                    ):
-                        st.session_state.selected_event = ev_idx
-                        st.rerun()
-        else:
-            st.info("Aucun événement ce mois-ci")
-        
-        # ---- Affichage du détail de l'événement sélectionné
-        if st.session_state.selected_event is not None:
-            if st.session_state.selected_event < len(st.session_state.events):
-                ev = st.session_state.events[st.session_state.selected_event]
-                
-                # Vérifier que l'événement est bien dans le bon mois et environnement
-                is_in_month = ((ev["d1"].year == year and ev["d1"].month == month) or 
-                              (ev["d2"].year == year and ev["d2"].month == month) or
-                              (ev["d1"] <= date(year, month, 1) and ev["d2"] >= date(year, month, nb_days)))
-                
-                if ev["env"] == env_selected and is_in_month:
-                    st.divider()
-                    st.subheader("🔍 Détail de l'événement")
-                    
-                    with st.container(border=True):
-                        col1, col2, col3 = st.columns(3)
-                        
-                        with col1:
-                            st.metric("📱 Application", ev["app"])
-                            st.metric("🌐 Environnement", ev["env"])
-                        
-                        with col2:
-                            st.metric("🏷️ Type", ev["type"])
-                            duree = (ev['d2'] - ev['d1']).days + 1
-                            st.metric("⏱️ Durée", f"{duree} jour(s)")
-                        
-                        with col3:
-                            st.metric("📅 Date début", ev['d1'].strftime('%d/%m/%Y'))
-                            st.metric("📅 Date fin", ev['d2'].strftime('%d/%m/%Y'))
-                        
-                        if ev["comment"]:
-                            st.markdown("---")
-                            st.markdown("**💬 Commentaire :**")
-                            st.info(ev["comment"])
-                        else:
-                            st.markdown("---")
-                            st.caption("_Aucun commentaire_")
-                        
-                        if st.button("✖️ Fermer", key=f"close_{i}"):
-                            st.session_state.selected_event = None
-                            st.rerun()
+        st.caption("💡 Astuce : Survolez une cellule d'événement pour voir tous les détails")
