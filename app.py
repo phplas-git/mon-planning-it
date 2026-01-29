@@ -194,37 +194,33 @@ st.markdown("""
     
     /* TOOLTIP */
     .tooltip-wrapper { position: relative; width: 100%; height: 100%; }
-    .tooltip-content { 
-        visibility: hidden; 
+    
+    #global-tooltip { 
+        display: none;
         width: 300px; 
         background-color: #1e293b; 
         color: #fff; 
         border-radius: 6px; 
         padding: 14px; 
         position: fixed;
-        opacity: 0; 
-        transition: opacity 0.2s, visibility 0.2s; 
         box-shadow: 0 10px 25px rgba(0,0,0,0.4); 
         font-size: 12px; 
-        z-index: 9999; 
+        z-index: 99999; 
         pointer-events: none; 
         text-align: left;
         line-height: 1.7;
     }
-    .tooltip-content::before { 
+    
+    #global-tooltip::before { 
         content: ""; 
         position: absolute; 
-        bottom: 100%; 
-        left: 50%; 
-        margin-left: -6px; 
+        top: -6px; 
+        left: 20px; 
         border-width: 6px; 
         border-style: solid; 
         border-color: transparent transparent #1e293b transparent; 
     }
-    .planning-table td:hover .tooltip-content { 
-        visibility: visible; 
-        opacity: 1; 
-    }
+    
     .tooltip-label { 
         font-weight: bold; 
         color: #4ade80; 
@@ -253,6 +249,65 @@ st.markdown("""
         background: #94a3b8;
     }
 </style>
+
+<script>
+// Tooltip dynamique
+document.addEventListener('DOMContentLoaded', function() {
+    let tooltip = document.getElementById('global-tooltip');
+    if (!tooltip) {
+        tooltip = document.createElement('div');
+        tooltip.id = 'global-tooltip';
+        document.body.appendChild(tooltip);
+    }
+    
+    document.addEventListener('mouseover', function(e) {
+        const cell = e.target.closest('td[data-tooltip]');
+        if (cell) {
+            const tooltipContent = cell.getAttribute('data-tooltip');
+            tooltip.innerHTML = tooltipContent;
+            tooltip.style.display = 'block';
+            positionTooltip(e, tooltip);
+        }
+    });
+    
+    document.addEventListener('mousemove', function(e) {
+        const cell = e.target.closest('td[data-tooltip]');
+        if (cell && tooltip.style.display === 'block') {
+            positionTooltip(e, tooltip);
+        }
+    });
+    
+    document.addEventListener('mouseout', function(e) {
+        const cell = e.target.closest('td[data-tooltip]');
+        if (cell && !e.relatedTarget?.closest('td[data-tooltip]')) {
+            tooltip.style.display = 'none';
+        }
+    });
+    
+    function positionTooltip(e, tooltip) {
+        const x = e.clientX;
+        const y = e.clientY;
+        const tooltipWidth = 300;
+        const tooltipHeight = tooltip.offsetHeight || 200;
+        
+        let left = x + 15;
+        let top = y + 15;
+        
+        // Ajuster si dépasse à droite
+        if (left + tooltipWidth > window.innerWidth) {
+            left = x - tooltipWidth - 15;
+        }
+        
+        // Ajuster si dépasse en bas
+        if (top + tooltipHeight > window.innerHeight) {
+            top = y - tooltipHeight - 15;
+        }
+        
+        tooltip.style.left = left + 'px';
+        tooltip.style.top = top + 'px';
+    }
+});
+</script>
 """, unsafe_allow_html=True)
 
 # ==================================================
@@ -381,22 +436,24 @@ elif st.session_state.page == "planning":
                         
                         content = f'<div class="event-cell {t_cls}">{t_raw[:3]}</div>'
                         
-                        # FIX 2 : Construction du tooltip CORRECTE (sans balises cassées)
+                        # Construction du tooltip (stocké en attribut data)
                         dur = (ev["d2"] - ev["d1"]).days + 1
-                        comment_text = str(ev.get('comment', '-')).replace('"', '&quot;').replace("'", '&#39;')
+                        comment_text = str(ev.get('comment', '-')).replace('"', '&quot;').replace("'", '&#39;').replace('<', '&lt;').replace('>', '&gt;')
                         
-                        tooltip_html = f'''<div class="tooltip-content" style="top: {42}px; left: 50%; transform: translateX(-50%);">
-<strong style="color:#60a5fa; font-size:13px; display:block; margin-bottom:8px;">📋 {ev['type']}</strong>
+                        tooltip_data = f'''<strong style="color:#60a5fa; font-size:13px; display:block; margin-bottom:8px;">📋 {ev['type']}</strong>
 <span class="tooltip-label">📱 App:</span> {ev['app']}<br>
 <span class="tooltip-label">⏰ Heures:</span> {ev.get('h1','00:00')} - {ev.get('h2','23:59')}<br>
 <span class="tooltip-label">📅 Dates:</span> {ev['d1'].strftime('%d/%m')} au {ev['d2'].strftime('%d/%m')}<br>
 <span class="tooltip-label">⏱️ Durée:</span> {dur} jour(s)<br>
-{f'<span class="tooltip-label">🎉 Férié:</span> {h_name}<br>' if h_name else ''}<span class="tooltip-label">💬 Note:</span> {comment_text if comment_text != '-' else '<i>Aucune</i>'}
-</div>'''
-                    
-                    # Assemblage de la cellule
-                    class_str = " ".join(td_class) if td_class else ""
-                    html += f'<td class="{class_str}"><div class="tooltip-wrapper">{content}{tooltip_html}</div></td>'
+{f'<span class="tooltip-label">🎉 Férié:</span> {h_name}<br>' if h_name else ''}<span class="tooltip-label">💬 Note:</span> {comment_text if comment_text != '-' else '<i>Aucune</i>'}'''
+                        
+                        # Assemblage de la cellule avec data-tooltip
+                        class_str = " ".join(td_class) if td_class else ""
+                        html += f'<td class="{class_str}" data-tooltip=\'{tooltip_data}\'><div class="tooltip-wrapper">{content}</div></td>'
+                    else:
+                        # Cellule sans événement
+                        class_str = " ".join(td_class) if td_class else ""
+                        html += f'<td class="{class_str}"><div class="tooltip-wrapper">{content}</div></td>'
                 
                 html += '</tr>'
             
