@@ -106,6 +106,7 @@ css = """
         border: 1px solid #ddd;
         padding: 8px;
         background-color: #f2f2f2;
+        color: #000000 !important; /* Force le texte en noir pour les headers */
         font-weight: bold;
         text-align: center;
         font-size: 11px;
@@ -122,15 +123,16 @@ css = """
         position: relative;
         height: 35px;
         cursor: pointer;
+        color: #000000; /* Texte noir par défaut dans les cases */
     }
     .planning-table td.app-name {
         text-align: left;
         font-weight: bold;
         background-color: #f9f9f9;
+        color: #000000 !important; /* Force le texte en noir pour le nom des apps */
     }
     .planning-table td.weekend {
-        background-color: #f0f0f0;
-        color: #999;
+        background-color: #dcdcdc !important; /* Gris un peu plus foncé pour voir la différence */
     }
     .planning-table td.ferie {
         background-color: #FFE6F0;
@@ -145,7 +147,7 @@ css = """
     }
     .planning-table td.mai {
         background-color: #FFC000;
-        color: black;
+        color: black; /* Maintenance en noir car fond jaune */
     }
     .planning-table td.tes {
         background-color: #00B050;
@@ -160,6 +162,8 @@ css = """
     .tooltip {
         position: relative;
         display: inline-block;
+        width: 100%;
+        height: 100%;
     }
     .tooltip .tooltiptext {
         visibility: hidden;
@@ -179,6 +183,7 @@ css = """
         font-size: 13px;
         line-height: 1.6;
         box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        font-weight: normal;
     }
     .tooltip .tooltiptext::after {
         content: "";
@@ -244,7 +249,8 @@ for i, tab in enumerate(tabs):
                 # Weekend
                 if d.weekday() >= 5:
                     classes.append("weekend")
-                    cell_content = "•"
+                    # Pas de point, juste la couleur de fond définie dans le CSS
+                    cell_content = "" 
                 
                 # Jour férié
                 if d in JOURS_FERIES_2026:
@@ -292,6 +298,7 @@ for i, tab in enumerate(tabs):
                 
                 class_str = ' '.join(classes) if classes else ''
                 
+                # Si on a un tooltip (c'est un event), on l'enrobe. Sinon cellule simple.
                 if tooltip_content:
                     html += f'<td class="{class_str}"><div class="tooltip">{cell_content}{tooltip_content}</div></td>'
                 else:
