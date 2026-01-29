@@ -67,15 +67,18 @@ def save_events_db(event_list):
             supabase.table("evenements").insert(data).execute()
     except Exception as e: st.error(f"Erreur Events : {e}")
 
-# Variables Globales
+# --- LOGIQUE TEMPORELLE ---
 TODAY = date.today()
-JOURS_FERIES_2026 = [
-    date(2026, 1, 1), date(2026, 4, 6), date(2026, 5, 1), date(2026, 5, 8),
-    date(2026, 5, 14), date(2026, 5, 25), date(2026, 7, 14), date(2026, 8, 15),
-    date(2026, 11, 1), date(2026, 11, 11), date(2026, 12, 25),
-]
+MONTHS_FR = ["Janvier","Février","Mars","Avril","Mai","Juin","Juillet","Août","Septembre","Octobre","Novembre","Décembre"]
 
-# Initialisation du State
+def get_holidays(year):
+    # Liste simplifiée pour l'exemple (peut être automatisée avec la lib holidays)
+    return [
+        date(year, 1, 1), date(year, 5, 1), date(year, 5, 8), date(year, 7, 14), 
+        date(year, 8, 15), date(year, 11, 1), date(year, 11, 11), date(year, 12, 25)
+    ]
+
+# State Management
 if "data_loaded" not in st.session_state:
     an, af, ed = load_data()
     st.session_state.apps, st.session_state.apps_data, st.session_state.events = an, af, ed
@@ -116,6 +119,11 @@ with st.sidebar:
     if st.button("📝 Gérer Événements", use_container_width=True): st.session_state.page = "events"; st.rerun()
     if st.button("📱 Gérer Applications", use_container_width=True): st.session_state.page = "apps"; st.rerun()
     st.divider()
+    
+    # SÉLECTEUR D'ANNÉE
+    selected_year = st.selectbox("Année de consultation", [2025, 2026, 2027, 2028], index=1)
+    
+    st.divider()
     if st.button("🔄 Recharger depuis Cloud"): del st.session_state.data_loaded; st.rerun()
 
 # ==================================================
@@ -126,11 +134,7 @@ with st.sidebar:
 if st.session_state.page == "apps":
     st.title("📱 Gestion des Applications")
     clean_data = [{"Nom": i.get('nom', ''), "Ordre": i.get('ordre', 0)} for i in st.session_state.apps_data]
-    
-    if clean_data:
-        df_apps = pd.DataFrame(clean_data)
-    else:
-        df_apps = pd.DataFrame(columns=["Nom", "Ordre"])
+    df_apps = pd.DataFrame(clean_data if clean_data else None, columns=["Nom", "Ordre"])
     
     edited_apps = st.data_editor(df_apps, num_rows="dynamic", use_container_width=True, hide_index=True, 
                                  column_config={"Nom": st.column_config.TextColumn("Nom", required=True), 
@@ -161,7 +165,12 @@ elif st.session_state.page == "events":
             "h2": st.column_config.TextColumn("H. Fin", default="23:59"),
         }
 
-        edited_evts = st.data_editor(df_evts, num_rows="dynamic", use_container_width=True, hide_index=True, column_config=col_config, key="ed_evts")
+        # ON MASQUE LES COLONNES TECHNIQUES (id et created_at)
+        cols_to_show = ["app", "env", "type", "d1", "d2", "h1", "h2", "comment"]
+        # On vérifie si les colonnes existent avant de filtrer
+        existing_cols = [c for c in cols_to_show if c in df_evts.columns]
+        
+        edited_evts = st.data_editor(df_evts[existing_cols], num_rows="dynamic", use_container_width=True, hide_index=True, column_config=col_config, key="ed_evts")
         
         if st.button("💾 Sauvegarder"):
             with st.spinner("Enregistrement..."):
@@ -181,15 +190,21 @@ elif st.session_state.page == "events":
 
 # --- PLANNING VISUEL ---
 elif st.session_state.page == "planning":
-    st.title("📅 Planning IT 2026")
+    st.title(f"📅 Planning Visuel {selected_year}")
     env_sel = st.radio("Secteur :", ["PROD", "PRÉPROD", "RECETTE"], horizontal=True)
-    tabs = st.tabs(["Janvier","Février","Mars","Avril","Mai","Juin","Juillet","Août","Septembre","Octobre","Novembre","Décembre"])
+    
+    # FOCUS AUTOMATIQUE SUR LE MOIS EN COURS (Seulement si on est dans l'année en cours)
+    default_tab_index = TODAY.month - 1 if TODAY.year == selected_year else 0
+    tabs = st.tabs(MONTHS_FR)
+
+    holidays = get_holidays(selected_year)
 
     for i, tab in enumerate(tabs):
+        # On force l'affichage du mois actuel
         with tab:
             m = i + 1
-            days = calendar.monthrange(2026, m)[1]
-            dates = [date(2026, m, d) for d in range(1, days + 1)]
+            days_in_month = calendar.monthrange(selected_year, m)[1]
+            dates = [date(selected_year, m, d) for d in range(1, days_in_month + 1)]
             if not st.session_state.apps: st.info("Aucune donnée."); continue
 
             html = '<div class="planning-wrap"><table class="planning-table"><thead><tr><th class="app-header">Application</th>'
@@ -204,17 +219,22 @@ elif st.session_state.page == "planning":
                     cls, cnt, ttp = [], "", ""
                     if d == TODAY: cls.append("today-col")
                     if d.weekday() >= 5: cls.append("weekend")
-                    if d in JOURS_FERIES_2026: cls.append("ferie"); cnt = "🎉"
+                    if d in holidays: cls.append("ferie"); cnt = "🎉"
                     
                     found = next((e for e in st.session_state.events if e["app"] == app and e["env"] == env_sel and e["d1"] <= d <= e["d2"]), None)
                     if found:
                         t_cls = found["type"][:3].lower() if found["type"] != "MAINTENANCE" else "mai"
                         if found["type"] == "TEST": t_cls = "test"
                         cnt = f'<div class="event-cell {t_cls}">{found["type"][:3].upper()}</div>'
+                        
+                        # CALCUL DE LA DURÉE
+                        delta = (found["d2"] - found["d1"]).days + 1
+                        
                         ttp = f"""<div class="tooltip-content">
                             <span class="tooltip-label">📱 App:</span>{found["app"]}<br>
                             <span class="tooltip-label">🕒 Heures:</span>De {found.get('h1','00:00')} à {found.get('h2','23:59')}<br>
                             <span class="tooltip-label">📅 Dates:</span>{found["d1"].strftime("%d/%m")} au {found["d2"].strftime("%d/%m")}<br>
+                            <span class="tooltip-label">⏱️ Durée:</span>{delta} j<br>
                             <span class="tooltip-label">💬 Note:</span>{found["comment"] if found["comment"] else "-"}
                         </div>"""
                     
