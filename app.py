@@ -18,7 +18,7 @@ JOURS_FERIES_2026 = [
 # Initialisation
 if "apps" not in st.session_state: st.session_state.apps = []
 if "events" not in st.session_state: st.session_state.events = []
-if "page" not in st.session_state: st.session_state.page = "planning" # Page par défaut
+if "page" not in st.session_state: st.session_state.page = "planning"
 
 # ==================================================
 # 2. CSS (DESIGN PRO)
@@ -96,23 +96,20 @@ if st.session_state.page == "apps":
     st.title("📱 Gestion des Applications")
     st.info("Ajoutez, renommez ou supprimez des applications. L'ordre de la liste définit l'ordre dans le planning.")
     
-    # Transformation en DataFrame pour l'éditeur
     df_apps = pd.DataFrame(st.session_state.apps, columns=["Nom Application"])
     
     edited_apps = st.data_editor(
         df_apps,
-        num_rows="dynamic", # Permet l'ajout/suppression
+        num_rows="dynamic",
         use_container_width=True,
         hide_index=True,
         key="editor_apps"
     )
     
     if st.button("💾 Sauvegarder les Applications"):
-        # On récupère la colonne et on nettoie
         new_list = [x.upper().strip() for x in edited_apps["Nom Application"].tolist() if x]
         st.session_state.apps = new_list
         st.success("✅ Liste des applications mise à jour !")
-        # On ne rerun pas forcément pour laisser l'utilisateur voir le message
 
 # --- VUE 2 : GESTION DES ÉVÉNEMENTS (PUBLIC) ---
 elif st.session_state.page == "events":
@@ -123,14 +120,19 @@ elif st.session_state.page == "events":
     else:
         st.caption("Modifiez directement les lignes ci-dessous. Cochez les cases à gauche pour supprimer.")
         
-        # Préparation des données pour l'éditeur
+        # Préparation des données
         if st.session_state.events:
             df_evts = pd.DataFrame(st.session_state.events)
+            
+            # --- CORRECTION DE L'ERREUR ---
+            # On force la conversion des colonnes en type "Date" pour que Streamlit soit content
+            if not df_evts.empty:
+                df_evts["d1"] = pd.to_datetime(df_evts["d1"]).dt.date
+                df_evts["d2"] = pd.to_datetime(df_evts["d2"]).dt.date
+            # ------------------------------
         else:
-            # Création d'un DF vide avec les bonnes colonnes si liste vide
             df_evts = pd.DataFrame(columns=["app", "env", "type", "d1", "d2", "comment"])
 
-        # Configuration des colonnes (Listes déroulantes, Dates...)
         col_config = {
             "app": st.column_config.SelectboxColumn("Application", options=st.session_state.apps, required=True, width="medium"),
             "env": st.column_config.SelectboxColumn("Environnement", options=["PROD", "PRÉPROD", "RECETTE"], required=True, width="small"),
@@ -150,10 +152,8 @@ elif st.session_state.page == "events":
         )
 
         if st.button("💾 Sauvegarder les Événements"):
-            # Reconstruction propre de la liste d'événements
             cleaned_events = []
             for index, row in edited_evts.iterrows():
-                # On vérifie que les champs obligatoires sont là
                 if row["app"] and row["d1"] and row["d2"]:
                     cleaned_events.append({
                         "app": row["app"],
@@ -166,7 +166,6 @@ elif st.session_state.page == "events":
             
             st.session_state.events = cleaned_events
             st.success(f"✅ {len(cleaned_events)} événements sauvegardés !")
-
 
 # --- VUE 3 : PLANNING VISUEL (DÉFAUT) ---
 elif st.session_state.page == "planning":
@@ -187,7 +186,7 @@ elif st.session_state.page == "planning":
                 st.info("Le planning est vide. Allez dans 'Gérer Applications' (Admin) pour commencer.")
                 continue
 
-            apps = st.session_state.apps # L'ordre est celui défini dans la page Apps
+            apps = st.session_state.apps
 
             html = '<div class="planning-wrap"><table class="planning-table">'
             
@@ -215,7 +214,12 @@ elif st.session_state.page == "planning":
                     found_ev = None
                     for ev in st.session_state.events:
                         if ev["app"] == app and ev["env"] == env_selected:
-                            if ev["d1"] <= d <= ev["d2"]:
+                            # Comparaison de dates sécurisée
+                            # On s'assure que tout est en type 'date' pour éviter les bugs
+                            ev_d1 = ev["d1"] if isinstance(ev["d1"], date) else pd.to_datetime(ev["d1"]).date()
+                            ev_d2 = ev["d2"] if isinstance(ev["d2"], date) else pd.to_datetime(ev["d2"]).date()
+                            
+                            if ev_d1 <= d <= ev_d2:
                                 found_ev = ev
                                 break
                     
@@ -230,13 +234,16 @@ elif st.session_state.page == "planning":
                         short_txt = found_ev["type"][:3]
                         content = f'<div class="event-cell {type_cls}">{short_txt}</div>'
                         
-                        duree = (found_ev['d2'] - found_ev['d1']).days + 1
+                        ev_d1 = found_ev["d1"] if isinstance(found_ev["d1"], date) else pd.to_datetime(found_ev["d1"]).date()
+                        ev_d2 = found_ev["d2"] if isinstance(found_ev["d2"], date) else pd.to_datetime(found_ev["d2"]).date()
+                        
+                        duree = (ev_d2 - ev_d1).days + 1
                         tooltip = f"""
                         <div class="tooltip-content">
                             <span class="tooltip-label">📱 App:</span> {found_ev['app']}<br>
                             <span class="tooltip-label">🌐 Env:</span> {found_ev['env']}<br>
                             <span class="tooltip-label">🏷️ Type:</span> {found_ev['type']}<br>
-                            <span class="tooltip-label">📅 Date:</span> {found_ev['d1'].strftime('%d/%m')} au {found_ev['d2'].strftime('%d/%m')}<br>
+                            <span class="tooltip-label">📅 Date:</span> {ev_d1.strftime('%d/%m')} au {ev_d2.strftime('%d/%m')}<br>
                             <span class="tooltip-label">⏱️ Durée:</span> {duree}j<br>
                             <span class="tooltip-label">💬 Note:</span> {found_ev['comment'] if found_ev['comment'] else '-'}
                         </div>
