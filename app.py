@@ -109,15 +109,15 @@ for i, tab in enumerate(tabs):
         # "grid_0" sera toujours le tableau de Janvier, peu importe l'environnement.
         # Cela empêche Streamlit de créer des doublons.
         
-        response = st.dataframe(
-            df.style.map(style_val),
-            use_container_width=True,
-            hide_index=True,
-            column_config=cf,
-            on_select="rerun",
-            selection_mode=["single-row", "single-column"],
-            key=f"grid_tab_{i}"  # <--- CLÉ SIMPLE ET STABLE
-        )
+response = st.dataframe(
+    df.style.applymap(style_val),
+    use_container_width=True,
+    hide_index=True,
+    column_config=cf,
+    on_select="rerun",
+    selection_mode=["single-row", "single-column"],
+    key=f"grid_{env_selected}_{i}"
+)
         
         # --- INTERACTION (CLIC) ---
         if response.selection.rows and response.selection.columns:
@@ -149,4 +149,5 @@ for i, tab in enumerate(tabs):
                     st.caption("Rien de prévu ce jour-là.")
         else:
             st.caption("👆 Cliquez sur une case colorée pour voir le détail.")
+
 
