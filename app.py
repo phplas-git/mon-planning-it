@@ -77,11 +77,11 @@ if "data_loaded" not in st.session_state:
 if "page" not in st.session_state: st.session_state.page = "planning"
 
 # ==================================================
-# 2. CSS DESIGN (RESTAURÉ ET FIXÉ)
+# 2. CSS DESIGN (CORRIGÉ)
 # ==================================================
 st.markdown("""
 <style>
-    .planning-wrap { overflow-x: auto; padding-bottom: 250px; }
+    .planning-wrap { overflow-x: auto; padding-bottom: 20px; }
     .planning-table { width: 100%; border-collapse: separate; border-spacing: 0; background-color: #fff; border: 1px solid #e2e8f0; border-radius: 8px; font-family: sans-serif; font-size: 12px; table-layout: fixed; }
     
     .planning-table th { background-color: #f8fafc; color: #334155; padding: 10px 2px; text-align: center; border-right: 1px solid #e2e8f0; border-bottom: 2px solid #cbd5e1; }
@@ -98,14 +98,56 @@ st.markdown("""
     .weekend { background-color: #f1f5f9 !important; }
     .ferie { background-color: #FFE6F0 !important; }
 
-    .event-cell { display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; color: white; font-weight: bold; font-size: 9px; line-height: 1; position: relative; z-index: 5; }
-    .mep { background-color: #0070C0; } .inc { background-color: #FF0000; } .mai { background-color: #FFC000; color: black; } .test { background-color: #00B050; } .mor { background-color: #9600C8; }
+    .event-cell { display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; color: white; font-weight: bold; font-size: 10px; line-height: 1; position: relative; z-index: 5; cursor: pointer; }
+    .mep { background-color: #0070C0; } 
+    .inc { background-color: #FF0000; } 
+    .mai { background-color: #FFC000; color: black; } 
+    .test { background-color: #00B050; } 
+    .mor { background-color: #9600C8; }
     
-    /* TOOLTIP EN BAS */
-    .tooltip-content { visibility: hidden; width: 240px; background-color: #1e293b; color: #fff; border-radius: 4px; padding: 10px; position: absolute; top: 100%; left: 50%; transform: translateX(-50%); opacity: 0; transition: opacity 0.2s; box-shadow: 0 10px 15px rgba(0,0,0,0.3); font-size: 11px; z-index: 1000; pointer-events: none; text-align: left; }
-    .tooltip-content::after { content: ""; position: absolute; bottom: 100%; left: 50%; margin-left: -5px; border-width: 5px; border-style: solid; border-color: transparent transparent #1e293b transparent; }
-    .planning-table td:hover .tooltip-content { visibility: visible; opacity: 1; }
-    .tooltip-label { font-weight: bold; color: #4ade80; }
+    /* TOOLTIP CORRIGÉ */
+    .tooltip-wrapper { position: relative; width: 100%; height: 100%; }
+    .tooltip-content { 
+        visibility: hidden; 
+        width: 280px; 
+        background-color: #1e293b; 
+        color: #fff; 
+        border-radius: 6px; 
+        padding: 12px; 
+        position: absolute; 
+        top: 100%; 
+        left: 50%; 
+        transform: translateX(-50%); 
+        margin-top: 5px;
+        opacity: 0; 
+        transition: opacity 0.2s, visibility 0.2s; 
+        box-shadow: 0 10px 15px rgba(0,0,0,0.3); 
+        font-size: 11px; 
+        z-index: 1000; 
+        pointer-events: none; 
+        text-align: left;
+        line-height: 1.6;
+    }
+    .tooltip-content::before { 
+        content: ""; 
+        position: absolute; 
+        bottom: 100%; 
+        left: 50%; 
+        margin-left: -5px; 
+        border-width: 5px; 
+        border-style: solid; 
+        border-color: transparent transparent #1e293b transparent; 
+    }
+    .planning-table td:hover .tooltip-content { 
+        visibility: visible; 
+        opacity: 1; 
+    }
+    .tooltip-label { 
+        font-weight: bold; 
+        color: #4ade80; 
+        display: inline-block;
+        min-width: 70px;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -119,7 +161,7 @@ with st.sidebar:
     if st.button("📱 Applications", use_container_width=True): st.session_state.page = "apps"; st.rerun()
     st.divider()
     years_list = [2025, 2026, 2027, 2028]
-    sel_year = st.selectbox("Année", years_list, index=years_list.index(TODAY.year))
+    sel_year = st.selectbox("Année", years_list, index=years_list.index(TODAY.year) if TODAY.year in years_list else 1)
     st.divider()
     if st.button("🔄 Actualiser"): del st.session_state.data_loaded; st.rerun()
 
@@ -167,56 +209,91 @@ elif st.session_state.page == "planning":
             days_in_m = calendar.monthrange(sel_year, m)[1]
             dates_m = [date(sel_year, m, d) for d in range(1, days_in_m + 1)]
             
+            # FIX 1 : Afficher toutes les apps même sans événements
             if not st.session_state.apps:
                 st.info("Aucune application enregistrée.")
                 continue
 
-            # CONSTRUCTION TABLEAU (STRUCTURE FIXE)
+            # CONSTRUCTION TABLEAU
             html = f'<div class="planning-wrap"><table class="planning-table"><thead><tr><th class="app-header">Application</th>'
+            
+            # En-têtes des jours
             for d in dates_m:
                 th_c = "today-header" if d == TODAY else ""
                 day_l = ["L","M","M","J","V","S","D"][d.weekday()]
                 html += f'<th class="{th_c}">{d.day}<br>{day_l}</th>'
             html += '</tr></thead><tbody>'
 
+            # FIX 1 : Parcourir TOUTES les apps (pas seulement celles avec événements)
             for app_n in st.session_state.apps:
                 html += f'<tr><td class="app-name">{app_n}</td>'
+                
+                # FIX 3 : Pour chaque jour, vérifier si un événement couvre ce jour
                 for d in dates_m:
                     td_class = []
-                    # 1. Gestion des styles de fond
-                    if d == TODAY: td_class.append("today-col")
-                    if d.weekday() >= 5: td_class.append("weekend")
-                    
-                    h_name = fr_holidays.get(d)
                     content = ""
-                    tooltip_inner = ""
+                    tooltip_html = ""
                     
+                    # Styles de base
+                    if d == TODAY: 
+                        td_class.append("today-col")
+                    if d.weekday() >= 5: 
+                        td_class.append("weekend")
+                    
+                    # Vérifier jour férié
+                    h_name = fr_holidays.get(d)
                     if h_name:
                         td_class.append("ferie")
-                        content = "🎉"
-                        tooltip_inner = f'<span class="tooltip-label">Férié:</span> {h_name}'
-
-                    # 2. Recherche d'événement (Positionnement précis)
-                    ev = next((e for e in st.session_state.events if e["app"] == app_n and e["env"] == env_sel and e["d1"] <= d <= e["d2"]), None)
+                        if d.weekday() < 5:  # Afficher emoji seulement si pas week-end
+                            content = "🎉"
                     
-                    if ev:
+                    # FIX 3 : Chercher un événement qui COUVRE ce jour (pas seulement qui commence ce jour)
+                    matching_event = None
+                    for ev in st.session_state.events:
+                        if ev["app"] == app_n and ev["env"] == env_sel:
+                            # Vérifier si le jour actuel est dans la plage de l'événement
+                            if ev["d1"] <= d <= ev["d2"]:
+                                matching_event = ev
+                                break
+                    
+                    # Si événement trouvé pour ce jour
+                    if matching_event:
+                        ev = matching_event
                         t_raw = str(ev["type"]).upper()
-                        t_cls = "mep" if "MEP" in t_raw else "inc" if "INC" in t_raw else "mai" if "MAI" in t_raw else "test" if "TEST" in t_raw else "mor"
-                        content = f'<div class="event-cell {t_cls}">{t_raw[:3]}</div>'
-                        dur = (ev["d2"] - ev["d1"]).days + 1
                         
-                        tooltip_inner = f"""
-                        <span class="tooltip-label">App:</span> {ev['app']}<br>
-                        <span class="tooltip-label">Heures:</span> {ev.get('h1','00:00')} - {ev.get('h2','23:59')}<br>
-                        <span class="tooltip-label">Dates:</span> {ev['d1'].day}/{ev['d1'].month} au {ev['d2'].day}/{ev['d2'].month}<br>
-                        <span class="tooltip-label">Durée:</span> {dur}j<br>
-                        {f'<span class="tooltip-label">Férié:</span> {h_name}<br>' if h_name else ''}
-                        <span class="tooltip-label">Note:</span> {ev.get('comment','-')}
-                        """
-
-                    # 3. Assemblage de la cellule
-                    final_tooltip = f'<div class="tooltip-content">{tooltip_inner}</div>' if tooltip_inner else ""
-                    html += f'<td class="{" ".join(td_class)}">{content}{final_tooltip}</td>'
+                        # Déterminer la classe CSS
+                        if "MEP" in t_raw:
+                            t_cls = "mep"
+                        elif "INC" in t_raw:
+                            t_cls = "inc"
+                        elif "MAI" in t_raw:
+                            t_cls = "mai"
+                        elif "TEST" in t_raw:
+                            t_cls = "test"
+                        elif "MOR" in t_raw:
+                            t_cls = "mor"
+                        else:
+                            t_cls = "mep"  # Par défaut
+                        
+                        content = f'<div class="event-cell {t_cls}">{t_raw[:3]}</div>'
+                        
+                        # FIX 2 : Construction du tooltip CORRECTE (sans balises cassées)
+                        dur = (ev["d2"] - ev["d1"]).days + 1
+                        comment_text = str(ev.get('comment', '-')).replace('"', '&quot;').replace("'", '&#39;')
+                        
+                        tooltip_html = f'''<div class="tooltip-content">
+<span class="tooltip-label">App:</span> {ev['app']}<br>
+<span class="tooltip-label">Type:</span> {ev['type']}<br>
+<span class="tooltip-label">Heures:</span> {ev.get('h1','00:00')} - {ev.get('h2','23:59')}<br>
+<span class="tooltip-label">Dates:</span> {ev['d1'].strftime('%d/%m')} au {ev['d2'].strftime('%d/%m')}<br>
+<span class="tooltip-label">Durée:</span> {dur} jour(s)<br>
+{f'<span class="tooltip-label">Férié:</span> {h_name}<br>' if h_name else ''}<span class="tooltip-label">Note:</span> {comment_text}
+</div>'''
+                    
+                    # Assemblage de la cellule
+                    class_str = " ".join(td_class) if td_class else ""
+                    html += f'<td class="{class_str}"><div class="tooltip-wrapper">{content}{tooltip_html}</div></td>'
+                
                 html += '</tr>'
             
             html += '</tbody></table></div>'
