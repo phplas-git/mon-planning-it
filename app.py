@@ -92,7 +92,6 @@ for i, tab in enumerate(tabs):
                 for ev in st.session_state.events:
                     if ev['app'] == app and ev['env'] == env_selected:
                         if ev['d1'] <= d <= ev['d2']:
-                            # C'est ici que l'erreur se produisait avant
                             val = ev['type'][:3]
                 data[col].append(val)
         
@@ -108,8 +107,8 @@ for i, tab in enumerate(tabs):
             hide_index=True,
             column_config=cf,
             on_select="rerun",
-            # Note bien les tirets '-' ici, c'est ce qui corrige l'erreur précédente
-            selection_mode=["single-row", "single-column"]
+            selection_mode=["single-row", "single-column"],
+            key=f"grid_{i}"  # <--- C'EST ICI LA CORRECTION (ID UNIQUE)
         )
         
         # --- INTERACTION ---
