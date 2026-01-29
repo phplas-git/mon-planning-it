@@ -80,15 +80,16 @@ tabs = st.tabs(months)
 # ==================================================
 # STYLE CELLULE
 # ==================================================
-def style_val(val):
-    return {
+def get_cell_style(val):
+    styles = {
         "MEP": "background-color:#0070C0;color:white;font-weight:bold",
         "INC": "background-color:#FF0000;color:white;font-weight:bold",
         "MAI": "background-color:#FFC000;color:black;font-weight:bold",
         "TES": "background-color:#00B050;color:white;font-weight:bold",
         "MOR": "background-color:#9600C8;color:white;font-weight:bold",
-        "•": "background-color:#f0f0f0;color:transparent"
-    }.get(val, "")
+        "•": "background-color:#f0f0f0;color:#d0d0d0"
+    }
+    return styles.get(val, "")
 
 # ==================================================
 # TABLES PAR MOIS
@@ -121,54 +122,78 @@ for i, tab in enumerate(tabs):
 
         df = pd.DataFrame(data)
 
-        # ---- Colonnes non éditables
-        column_config = {
-            col: st.column_config.TextColumn(col, disabled=True) for col in df.columns
-        }
+        # ---- Configuration des colonnes
+        column_config = {"App": st.column_config.TextColumn("App", width="medium")}
+        for col in df.columns:
+            if col != "App":
+                column_config[col] = st.column_config.TextColumn(col, width="small")
 
-        # ---- Data editor (lecture seule mais sélection possible)
+        # ---- Data editor SANS style (c'est ça le problème !)
         key_editor = f"editor_{env_selected}_{i}"
 
-        st.data_editor(
-            df.style.applymap(style_val),
+        edited_df = st.data_editor(
+            df,
             hide_index=True,
             column_config=column_config,
-            key=key_editor
+            key=key_editor,
+            use_container_width=True,
+            disabled=True  # Désactive l'édition mais permet la sélection
         )
 
+        # ---- Affichage du style avec HTML pour visualisation
+        st.markdown("---")
+        
+        # Générer le HTML stylé pour affichage
+        html = "<table style='width:100%; border-collapse: collapse; font-size: 12px;'>"
+        html += "<tr>"
+        for col in df.columns:
+            html += f"<th style='border: 1px solid #ddd; padding: 8px; background-color: #f2f2f2;'>{col}</th>"
+        html += "</tr>"
+        
+        for idx, row in df.iterrows():
+            html += "<tr>"
+            for col in df.columns:
+                val = row[col]
+                style = get_cell_style(val)
+                html += f"<td style='border: 1px solid #ddd; padding: 8px; text-align: center; {style}'>{val}</td>"
+            html += "</tr>"
+        html += "</table>"
+        
+        with st.expander("📊 Vue stylée du planning"):
+            st.markdown(html, unsafe_allow_html=True)
+
         # ---- Lecture de la sélection
-        selected = st.session_state.get(key_editor, {}).get("selected_cells", [])
+        selection = st.session_state.get(key_editor, {})
+        
+        if "selection" in selection and selection["selection"]["rows"]:
+            row_idx = list(selection["selection"]["rows"])[0]
+            sel_app = df.iloc[row_idx]["App"]
+            
+            st.divider()
+            st.subheader(f"🔍 Événements pour {sel_app} - {months[i]}")
 
-        if selected:
-            cell = selected[0]
-            row_idx = cell["row"]
-            col_name = cell["column"]
+            events_found = [
+                ev for ev in st.session_state.events
+                if ev["app"] == sel_app and ev["env"] == env_selected
+                and (ev["d1"].month == month or ev["d2"].month == month)
+            ]
 
-            if col_name != "App":
-                sel_app = df.iloc[row_idx]["App"]
-                sel_day = int(col_name)
-                sel_date = date(year, month, sel_day)
-
-                st.divider()
-                st.subheader(f"🔍 {sel_app} — {sel_day} {months[i]}")
-
-                found = False
-                for ev in st.session_state.events:
-                    if ev["app"] == sel_app and ev["env"] == env_selected:
-                        if ev["d1"] <= sel_date <= ev["d2"]:
-                            found = True
-                            with st.container(border=True):
-                                st.metric("TYPE", ev["type"])
-                                st.markdown(
-                                    f"📅 **Du {ev['d1'].strftime('%d/%m')} "
-                                    f"au {ev['d2'].strftime('%d/%m')}**"
-                                )
-                                if ev["comment"]:
-                                    st.info(ev["comment"])
-                                else:
-                                    st.caption("Pas de commentaire.")
-
-                if not found:
-                    st.caption("Rien de prévu ce jour-là.")
+            if events_found:
+                for ev in events_found:
+                    with st.container(border=True):
+                        cols = st.columns([1, 3])
+                        with cols[0]:
+                            st.metric("TYPE", ev["type"])
+                        with cols[1]:
+                            st.markdown(
+                                f"📅 **Du {ev['d1'].strftime('%d/%m/%Y')} "
+                                f"au {ev['d2'].strftime('%d/%m/%Y')}**"
+                            )
+                        if ev["comment"]:
+                            st.info(ev["comment"])
+                        else:
+                            st.caption("Pas de commentaire.")
+            else:
+                st.caption("Aucun événement ce mois-ci.")
         else:
-            st.caption("👆 Cliquez sur une cellule pour voir le détail.")
+            st.caption("👆 Sélectionnez une ligne (cliquez sur le numéro de ligne à gauche) pour voir les détails.")
