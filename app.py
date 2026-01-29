@@ -3,14 +3,14 @@ import pandas as pd
 import calendar
 from datetime import date
 
-# --------------------------------------------------
-# CONFIGURATION
-# --------------------------------------------------
+# ==================================================
+# CONFIG
+# ==================================================
 st.set_page_config(page_title="Planning IT Pro", layout="wide")
 
-# --------------------------------------------------
-# SESSION STATE INIT
-# --------------------------------------------------
+# ==================================================
+# SESSION STATE
+# ==================================================
 if "apps" not in st.session_state:
     st.session_state.apps = []
 
@@ -20,38 +20,38 @@ if "events" not in st.session_state:
 if "selected_cell" not in st.session_state:
     st.session_state.selected_cell = None
 
-# --------------------------------------------------
+# ==================================================
 # SIDEBAR
-# --------------------------------------------------
+# ==================================================
 with st.sidebar:
     st.title("⚙️ Admin")
 
     # ---- Applications
-    with st.form("new_app_form", clear_on_submit=True):
-        st.subheader("Applications")
-        new_app = st.text_input("Nom").upper().strip()
-        if st.form_submit_button("Ajouter"):
-            if new_app and new_app not in st.session_state.apps:
+    with st.form("add_app", clear_on_submit=True):
+        new_app = st.text_input("Application").upper().strip()
+        if st.form_submit_button("Ajouter") and new_app:
+            if new_app not in st.session_state.apps:
                 st.session_state.apps.append(new_app)
                 st.rerun()
 
     st.divider()
 
     # ---- Events
-    st.subheader("Nouvel événement")
-    apps_list = sorted(st.session_state.apps) if st.session_state.apps else [""]
+    with st.form("add_event", clear_on_submit=True):
+        if st.session_state.apps:
+            f_app = st.selectbox("App", st.session_state.apps)
+        else:
+            st.info("Ajoutez d'abord une application")
+            st.stop()
 
-    with st.form("event_form", clear_on_submit=True):
-        f_app = st.selectbox("App", apps_list)
         f_env = st.selectbox("Env", ["PROD", "PRÉPROD", "RECETTE"])
         f_type = st.selectbox("Type", ["MEP", "INCIDENT", "MAINTENANCE", "TEST", "MORATOIRE"])
         f_comm = st.text_area("Détails")
-
         c1, c2 = st.columns(2)
         d1 = c1.date_input("Du")
         d2 = c2.date_input("Au")
 
-        if st.form_submit_button("Enregistrer") and f_app:
+        if st.form_submit_button("Enregistrer"):
             st.session_state.events.append({
                 "app": f_app,
                 "env": f_env,
@@ -63,27 +63,21 @@ with st.sidebar:
             st.success("Événement enregistré")
             st.rerun()
 
-    if st.button("Tout effacer"):
-        st.session_state.apps = []
-        st.session_state.events = []
-        st.session_state.selected_cell = None
-        st.rerun()
-
-# --------------------------------------------------
+# ==================================================
 # MAIN
-# --------------------------------------------------
+# ==================================================
 st.title("📅 Planning IT – 2026")
 env_selected = st.radio("Vue :", ["PROD", "PRÉPROD", "RECETTE"], horizontal=True)
 
-mois = [
-    "Janvier", "Février", "Mars", "Avril", "Mai", "Juin",
-    "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre"
+months = [
+    "Janvier","Février","Mars","Avril","Mai","Juin",
+    "Juillet","Août","Septembre","Octobre","Novembre","Décembre"
 ]
-tabs = st.tabs(mois)
+tabs = st.tabs(months)
 
-# --------------------------------------------------
+# ==================================================
 # STYLE
-# --------------------------------------------------
+# ==================================================
 def style_val(val):
     styles = {
         "MEP": "background-color:#0070C0;color:white;font-weight:bold",
@@ -91,28 +85,28 @@ def style_val(val):
         "MAI": "background-color:#FFC000;color:black;font-weight:bold",
         "TES": "background-color:#00B050;color:white;font-weight:bold",
         "MOR": "background-color:#9600C8;color:white;font-weight:bold",
-        "•": "background-color:#f4f4f4;color:transparent"
+        "•": "background-color:#f0f0f0;color:transparent"
     }
     return styles.get(val, "")
 
-# --------------------------------------------------
+# ==================================================
 # TABLES PAR MOIS
-# --------------------------------------------------
+# ==================================================
 for i, tab in enumerate(tabs):
     with tab:
+        year = 2026
+        month = i + 1
+        nb_days = calendar.monthrange(year, month)[1]
+        dates = [date(year, month, d) for d in range(1, nb_days + 1)]
+
         if not st.session_state.apps:
             st.info("Ajoutez une application pour commencer.")
             continue
 
-        year = 2026
-        month = i + 1
-        last_day = calendar.monthrange(year, month)[1]
-        dates = [date(year, month, d) for d in range(1, last_day + 1)]
-
+        # ---- Construction data
         apps = sorted(st.session_state.apps)
         data = {"App": apps}
 
-        # ---- Construction des cellules
         for d in dates:
             col = str(d.day)
             data[col] = []
@@ -126,51 +120,33 @@ for i, tab in enumerate(tabs):
 
         df = pd.DataFrame(data)
 
-        # ---- Colonnes
-        cf = {"App": st.column_config.TextColumn("App", pinned=True)}
-        for d in dates:
-            cf[str(d.day)] = st.column_config.TextColumn(str(d.day), width=35)
+        # ---- Data editor (lecture seule)
+        key_editor = f"editor_{env_selected}_{i}"
 
-        # ---- Dataframe
-        key_df = f"grid_{env_selected}_{year}_{i}"
-
-        st.dataframe(
+        st.data_editor(
             df.style.applymap(style_val),
-            use_container_width=True,
             hide_index=True,
-            column_config=cf,
-            selection_mode=["single-row", "single-column"],
-            key=key_df
+            disabled=True,
+            key=key_editor
         )
 
-        # ---- Lecture sélection (API correcte)
-        selection = st.session_state.get(key_df, {}).get("selection", {})
-        rows = selection.get("rows", [])
-        cols = selection.get("columns", [])
+        # ==================================================
+        # SÉLECTION
+        # ==================================================
+        selected = st.session_state.get(key_editor, {}).get("selected_cells", [])
 
-        if rows and cols:
-            st.session_state.selected_cell = {
-                "month": i,
-                "row": rows[0],
-                "col": cols[0],
-                "env": env_selected
-            }
-
-        # --------------------------------------------------
-        # DÉTAIL ÉVÉNEMENT
-        # --------------------------------------------------
-        sel = st.session_state.selected_cell
-        if sel and sel["month"] == i and sel["env"] == env_selected:
-            col_name = sel["col"]
-            row_idx = sel["row"]
+        if selected:
+            cell = selected[0]
+            row_idx = cell["row"]
+            col_name = cell["column"]
 
             if col_name != "App":
-                sel_app = apps[row_idx]
+                sel_app = df.iloc[row_idx]["App"]
                 sel_day = int(col_name)
                 sel_date = date(year, month, sel_day)
 
                 st.divider()
-                st.subheader(f"🔍 {sel_app} — {sel_day} {mois[i]}")
+                st.subheader(f"🔍 {sel_app} — {sel_day} {months[i]}")
 
                 found = False
                 for ev in st.session_state.events:
