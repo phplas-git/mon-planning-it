@@ -75,22 +75,39 @@ def save_apps_db(df_apps):
         st.error(f"❌ Erreur sauvegarde Apps : {e}")
 
 def save_events_db(event_list):
-    """Sauvegarde Events"""
+    """Sauvegarde Events (Version Robuste : accepte Dates et Textes)"""
     if not supabase: return
     try:
-        # 1. Nettoyage total (méthode bulldozer robuste)
+        # 1. Nettoyage total
         supabase.table("evenements").delete().neq("id", 0).execute()
             
         # 2. Insertion
         if event_list:
             data = []
             for ev in event_list:
+                # --- CORRECTION ICI ---
+                # On vérifie si c'est une Date (qui a la méthode isoformat) ou déjà du Texte
+                d1_val = ev['d1']
+                d2_val = ev['d2']
+                
+                # Si l'objet a la méthode isoformat (c'est une date), on l'utilise.
+                # Sinon (c'est déjà une chaîne de caractères), on le garde tel quel.
+                if hasattr(d1_val, 'isoformat'):
+                    d1_val = d1_val.isoformat()
+                else:
+                    d1_val = str(d1_val) # Sécurité
+
+                if hasattr(d2_val, 'isoformat'):
+                    d2_val = d2_val.isoformat()
+                else:
+                    d2_val = str(d2_val)
+
                 data.append({
                     "app": ev['app'],
                     "env": ev['env'],
                     "type": ev['type'],
-                    "d1": ev['d1'].isoformat(),
-                    "d2": ev['d2'].isoformat(),
+                    "d1": d1_val,
+                    "d2": d2_val,
                     "comment": ev['comment']
                 })
             supabase.table("evenements").insert(data).execute()
@@ -371,3 +388,4 @@ elif st.session_state.page == "planning":
                 <span><span style="color:#FFE6F0">■</span> Férié</span>
             </div>
             """, unsafe_allow_html=True)
+
