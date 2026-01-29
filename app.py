@@ -6,6 +6,7 @@ from datetime import date, timedelta
 # --- 1. CONFIGURATION ---
 st.set_page_config(page_title="Planning IT Pro", layout="wide")
 
+# Initialisation des variables en mémoire
 if 'events' not in st.session_state: st.session_state.events = []
 if 'apps' not in st.session_state: st.session_state.apps = []
 
@@ -22,7 +23,7 @@ with st.sidebar:
     st.divider()
     st.subheader("➕ Nouvel Événement")
     with st.form("add_event", clear_on_submit=True):
-        f_app = st.selectbox("Application", sorted(st.session_state.apps))
+        f_app = st.selectbox("Application", sorted(st.session_state.apps) if st.session_state.apps else [""])
         f_env = st.selectbox("Environnement", ["PROD", "PRÉPROD", "RECETTE"])
         f_type = st.selectbox("Type", ["MEP", "INCIDENT", "MAINTENANCE", "TEST", "MORATOIRE"])
         f_comment = st.text_area("Commentaire / Détails")
@@ -30,12 +31,13 @@ with st.sidebar:
         f_d1 = col1.date_input("Début")
         f_d2 = col2.date_input("Fin")
         if st.form_submit_button("Enregistrer"):
-            st.session_state.events.append({
-                'app': f_app, 'env': f_env, 'type': f_type, 
-                'd1': f_d1, 'd2': f_d2, 'comment': f_comment
-            })
-            st.success("Enregistré !")
-            st.rerun()
+            if f_app:
+                st.session_state.events.append({
+                    'app': f_app, 'env': f_env, 'type': f_type, 
+                    'd1': f_d1, 'd2': f_d2, 'comment': f_comment
+                })
+                st.success("Enregistré !")
+                st.rerun()
 
 # --- 3. INTERFACE PRINCIPALE ---
 st.title("📅 Planning IT - 2026")
@@ -52,7 +54,7 @@ for i, tab in enumerate(tabs):
         dates = [date(year, month_num, d) for d in range(1, num_days + 1)]
         
         if not st.session_state.apps:
-            st.info("Ajoutez une application à gauche.")
+            st.info("Ajoutez une application dans le menu à gauche.")
         else:
             apps = sorted(st.session_state.apps)
             grid_data = {"App": apps}
@@ -70,11 +72,12 @@ for i, tab in enumerate(tabs):
             
             df = pd.DataFrame(grid_data)
 
-            # Config colonnes
+            # Configuration des colonnes
             config_cols = {"App": st.column_config.TextColumn("Application", width="medium", pinned=True)}
             for d in dates:
                 config_cols[str(d.day)] = st.column_config.TextColumn(str(d.day), width=35)
 
+            # Style des couleurs (utilisation de .map pour Pandas 2.0+)
             def color_excel(val):
                 if val == "MEP": return "background-color: #0070C0; color: white; font-weight: bold"
                 if val == "INC": return "background-color: #FF0000; color: white; font-weight: bold"
@@ -84,10 +87,21 @@ for i, tab in enumerate(tabs):
                 if val == "•": return "background-color: #f1f3f4; color: transparent"
                 return ""
 
-            # --- TABLEAU AVEC DOUBLE SÉLECTION (LIGNE + COLONNE) ---
-            selection = st.dataframe(
-                df.style.applymap(color_excel),
+            # --- AFFICHAGE ET SÉLECTION ---
+            # Correction de la syntaxe de sélection pour Streamlit 1.53+
+            event = st.dataframe(
+                df.style.map(color_excel),
                 use_container_width=True,
                 hide_index=True,
                 column_config=config_cols,
+                on_select="rerun",
+                selection_mode=["single_row", "single_column"]
+            )
 
+            # --- 4. RÉCUPÉRATION DU CLIC ---
+            # On vérifie si une ligne ET une colonne sont sélectionnées
+            sel_rows = event.selection.rows
+            sel_cols = event.selection.columns
+
+            if sel_rows and sel_cols:
+                row_idx
