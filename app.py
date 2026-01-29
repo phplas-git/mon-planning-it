@@ -4,7 +4,7 @@ import calendar
 from datetime import date
 
 # ==================================================
-# CONFIG
+# CONFIGURATION PAGE
 # ==================================================
 st.set_page_config(page_title="Planning IT Pro", layout="wide")
 
@@ -26,7 +26,7 @@ if "selected_cell" not in st.session_state:
 with st.sidebar:
     st.title("⚙️ Admin")
 
-    # ---- Applications
+    # ---- Ajouter Application
     with st.form("add_app", clear_on_submit=True):
         new_app = st.text_input("Application").upper().strip()
         if st.form_submit_button("Ajouter") and new_app:
@@ -36,32 +36,34 @@ with st.sidebar:
 
     st.divider()
 
-    # ---- Events
-    with st.form("add_event", clear_on_submit=True):
-        if st.session_state.apps:
+    # ---- Ajouter Événement
+    if st.session_state.apps:
+        with st.form("add_event", clear_on_submit=True):
             f_app = st.selectbox("App", st.session_state.apps)
-        else:
-            st.info("Ajoutez d'abord une application")
-            st.stop()
+            f_env = st.selectbox("Env", ["PROD", "PRÉPROD", "RECETTE"])
+            f_type = st.selectbox("Type", ["MEP", "INCIDENT", "MAINTENANCE", "TEST", "MORATOIRE"])
+            f_comm = st.text_area("Détails")
+            c1, c2 = st.columns(2)
+            d1 = c1.date_input("Du")
+            d2 = c2.date_input("Au")
 
-        f_env = st.selectbox("Env", ["PROD", "PRÉPROD", "RECETTE"])
-        f_type = st.selectbox("Type", ["MEP", "INCIDENT", "MAINTENANCE", "TEST", "MORATOIRE"])
-        f_comm = st.text_area("Détails")
-        c1, c2 = st.columns(2)
-        d1 = c1.date_input("Du")
-        d2 = c2.date_input("Au")
+            if st.form_submit_button("Enregistrer"):
+                st.session_state.events.append({
+                    "app": f_app,
+                    "env": f_env,
+                    "type": f_type,
+                    "d1": d1,
+                    "d2": d2,
+                    "comment": f_comm
+                })
+                st.success("Événement enregistré")
+                st.rerun()
 
-        if st.form_submit_button("Enregistrer"):
-            st.session_state.events.append({
-                "app": f_app,
-                "env": f_env,
-                "type": f_type,
-                "d1": d1,
-                "d2": d2,
-                "comment": f_comm
-            })
-            st.success("Événement enregistré")
-            st.rerun()
+    if st.button("Tout effacer"):
+        st.session_state.apps = []
+        st.session_state.events = []
+        st.session_state.selected_cell = None
+        st.rerun()
 
 # ==================================================
 # MAIN
@@ -76,18 +78,17 @@ months = [
 tabs = st.tabs(months)
 
 # ==================================================
-# STYLE
+# STYLE CELLULE
 # ==================================================
 def style_val(val):
-    styles = {
+    return {
         "MEP": "background-color:#0070C0;color:white;font-weight:bold",
         "INC": "background-color:#FF0000;color:white;font-weight:bold",
         "MAI": "background-color:#FFC000;color:black;font-weight:bold",
         "TES": "background-color:#00B050;color:white;font-weight:bold",
         "MOR": "background-color:#9600C8;color:white;font-weight:bold",
         "•": "background-color:#f0f0f0;color:transparent"
-    }
-    return styles.get(val, "")
+    }.get(val, "")
 
 # ==================================================
 # TABLES PAR MOIS
@@ -103,10 +104,10 @@ for i, tab in enumerate(tabs):
             st.info("Ajoutez une application pour commencer.")
             continue
 
-        # ---- Construction data
         apps = sorted(st.session_state.apps)
         data = {"App": apps}
 
+        # ---- Remplissage des données
         for d in dates:
             col = str(d.day)
             data[col] = []
@@ -120,19 +121,22 @@ for i, tab in enumerate(tabs):
 
         df = pd.DataFrame(data)
 
-        # ---- Data editor (lecture seule)
+        # ---- Colonnes non éditables
+        column_config = {
+            col: st.column_config.TextColumn(col, disabled=True) for col in df.columns
+        }
+
+        # ---- Data editor (lecture seule mais sélection possible)
         key_editor = f"editor_{env_selected}_{i}"
 
         st.data_editor(
             df.style.applymap(style_val),
             hide_index=True,
-            disabled=True,
+            column_config=column_config,
             key=key_editor
         )
 
-        # ==================================================
-        # SÉLECTION
-        # ==================================================
+        # ---- Lecture de la sélection
         selected = st.session_state.get(key_editor, {}).get("selected_cells", [])
 
         if selected:
