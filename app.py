@@ -27,12 +27,10 @@ supabase = init_connection()
 def load_data():
     if not supabase: return [], [], []
     try:
-        # Charger Apps triées par 'ordre'
         res_apps = supabase.table("applications").select("*").order("ordre", desc=False).execute()
         apps_full = res_apps.data
         apps_names = [row['nom'] for row in apps_full]
         
-        # Charger Events
         res_evts = supabase.table("evenements").select("*").execute()
         evts_data = res_evts.data
         for ev in evts_data:
@@ -92,22 +90,15 @@ st.markdown("""
     .planning-wrap { overflow-x: auto; padding-bottom: 120px; }
     .planning-table { width: 100%; border-collapse: separate; border-spacing: 0; background-color: #fff; border: 1px solid #e2e8f0; border-radius: 8px; font-family: sans-serif; font-size: 13px; table-layout: fixed; }
     .planning-table th { background-color: #f8fafc; color: #334155; padding: 10px 5px; text-align: center; border-right: 1px solid #e2e8f0; border-bottom: 2px solid #cbd5e1; font-size: 11px; }
-    
-    /* COLONNE APPS FIXE */
     .planning-table th.app-header { text-align: left; padding-left: 15px; width: 150px; position: sticky; left: 0; z-index: 30; background-color: #f1f5f9 !important; border-right: 2px solid #cbd5e1; }
     .planning-table td.app-name { background-color: #f8fafc !important; color: #0f172a !important; font-weight: 600; text-align: left; padding-left: 15px; position: sticky; left: 0; z-index: 20; border-right: 2px solid #cbd5e1; }
-    
-    /* AUJOURD'HUI */
     .today-col { background-color: #eff6ff !important; border-left: 1px solid #3b82f6 !important; border-right: 1px solid #3b82f6 !important; }
     th.today-header { background-color: #3b82f6 !important; color: white !important; }
-
     .planning-table td { text-align: center; padding: 0; height: 40px; border-right: 1px solid #f1f5f9; border-bottom: 1px solid #f1f5f9; position: relative; background-color: #ffffff; }
     .planning-table td.weekend { background-color: #e2e8f0 !important; }
     .planning-table td.ferie { background-color: #FFE6F0 !important; }
-    
     .event-cell { display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; color: white; font-weight: bold; font-size: 10px; }
     .mep { background-color: #0070C0; } .inc { background-color: #FF0000; } .mai { background-color: #FFC000; color: black; } .test { background-color: #00B050; } .mor { background-color: #9600C8; }
-    
     .planning-table td:hover { z-index: 100; background-color: #f1f5f9; }
     .tooltip-content { visibility: hidden; width: 280px; background-color: #1e293b; color: #fff; text-align: left; border-radius: 6px; padding: 12px; position: absolute; top: 100%; left: 50%; transform: translateX(-50%); opacity: 0; transition: opacity 0.2s; box-shadow: 0 10px 15px rgba(0,0,0,0.3); font-size: 12px; line-height: 1.6; z-index: 1000; pointer-events: none; border: 1px solid #475569; }
     .tooltip-content::after { content: ""; position: absolute; bottom: 100%; left: 50%; margin-left: -5px; border-width: 5px; border-style: solid; border-color: transparent transparent #1e293b transparent; }
@@ -135,7 +126,11 @@ with st.sidebar:
 if st.session_state.page == "apps":
     st.title("📱 Gestion des Applications")
     clean_data = [{"Nom": i.get('nom', ''), "Ordre": i.get('ordre', 0)} for i in st.session_state.apps_data]
-    df_apps = pd.DataFrame(clean_data if clean_data else columns=["Nom", "Ordre"])
+    
+    if clean_data:
+        df_apps = pd.DataFrame(clean_data)
+    else:
+        df_apps = pd.DataFrame(columns=["Nom", "Ordre"])
     
     edited_apps = st.data_editor(df_apps, num_rows="dynamic", use_container_width=True, hide_index=True, 
                                  column_config={"Nom": st.column_config.TextColumn("Nom", required=True), 
