@@ -157,19 +157,28 @@ st.markdown("""
         background-color: #ffffff; 
     }
 
-    /* PRIORITÉS COULEURS */
-    .today-col { 
+    /* PRIORITÉS COULEURS - ORDRE IMPORTANT */
+    .weekend { background-color: #f1f5f9 !important; }
+    .ferie { background-color: #FFE6F0 !important; }
+    
+    /* Date du jour - SEULEMENT pour les cellules vides */
+    .today-col:not(.has-tooltip) { 
         background-color: #eff6ff !important; 
         box-shadow: inset 0 0 0 2px #3b82f6 !important; 
     }
+    
+    /* En-tête du jour actuel */
     th.today-header { 
         background-color: #3b82f6 !important; 
         color: white !important; 
         font-weight: 700;
     }
     
-    .weekend { background-color: #f1f5f9 !important; }
-    .ferie { background-color: #FFE6F0 !important; }
+    /* Les événements doivent rester avec leur couleur d'origine */
+    .has-tooltip.today-col {
+        background-color: transparent !important;
+        box-shadow: none !important;
+    }
 
     /* Événements */
     .event-cell { 
@@ -193,40 +202,7 @@ st.markdown("""
     .mor { background-color: #9600C8; }
     
     /* TOOLTIP */
-    .tooltip-wrapper { position: relative; width: 100%; height: 100%; }
-    
-    #global-tooltip { 
-        display: none;
-        width: 300px; 
-        background-color: #1e293b; 
-        color: #fff; 
-        border-radius: 6px; 
-        padding: 14px; 
-        position: fixed;
-        box-shadow: 0 10px 25px rgba(0,0,0,0.4); 
-        font-size: 12px; 
-        z-index: 99999; 
-        pointer-events: none; 
-        text-align: left;
-        line-height: 1.7;
-    }
-    
-    #global-tooltip::before { 
-        content: ""; 
-        position: absolute; 
-        top: -6px; 
-        left: 20px; 
-        border-width: 6px; 
-        border-style: solid; 
-        border-color: transparent transparent #1e293b transparent; 
-    }
-    
-    .tooltip-label { 
-        font-weight: bold; 
-        color: #4ade80; 
-        display: inline-block;
-        min-width: 75px;
-    }
+    .has-tooltip { position: relative; }
     
     /* Amélioration visuelle */
     .planning-table tbody tr:hover td:not(.app-name) {
@@ -248,66 +224,57 @@ st.markdown("""
     .planning-wrap::-webkit-scrollbar-thumb:hover {
         background: #94a3b8;
     }
+    
+    /* Tooltip simple avec CSS pur */
+    .has-tooltip { position: relative; }
+    .has-tooltip .tooltip-box {
+        visibility: hidden;
+        opacity: 0;
+        width: 300px;
+        background-color: #1e293b;
+        color: #fff;
+        border-radius: 6px;
+        padding: 14px;
+        position: absolute;
+        z-index: 9999;
+        bottom: 100%;
+        left: 50%;
+        transform: translateX(-50%);
+        margin-bottom: 8px;
+        box-shadow: 0 10px 25px rgba(0,0,0,0.4);
+        font-size: 12px;
+        text-align: left;
+        line-height: 1.7;
+        pointer-events: none;
+        transition: opacity 0.2s, visibility 0.2s;
+    }
+    .has-tooltip .tooltip-box::after {
+        content: "";
+        position: absolute;
+        top: 100%;
+        left: 50%;
+        margin-left: -6px;
+        border-width: 6px;
+        border-style: solid;
+        border-color: #1e293b transparent transparent transparent;
+    }
+    .has-tooltip:hover .tooltip-box {
+        visibility: visible;
+        opacity: 1;
+    }
+    /* Ajustement si le tooltip dépasse en haut */
+    tr:first-child .has-tooltip .tooltip-box {
+        bottom: auto;
+        top: 100%;
+        margin-top: 8px;
+        margin-bottom: 0;
+    }
+    tr:first-child .has-tooltip .tooltip-box::after {
+        top: auto;
+        bottom: 100%;
+        border-color: transparent transparent #1e293b transparent;
+    }
 </style>
-
-<script>
-// Tooltip dynamique
-document.addEventListener('DOMContentLoaded', function() {
-    let tooltip = document.getElementById('global-tooltip');
-    if (!tooltip) {
-        tooltip = document.createElement('div');
-        tooltip.id = 'global-tooltip';
-        document.body.appendChild(tooltip);
-    }
-    
-    document.addEventListener('mouseover', function(e) {
-        const cell = e.target.closest('td[data-tooltip]');
-        if (cell) {
-            const tooltipContent = cell.getAttribute('data-tooltip');
-            tooltip.innerHTML = tooltipContent;
-            tooltip.style.display = 'block';
-            positionTooltip(e, tooltip);
-        }
-    });
-    
-    document.addEventListener('mousemove', function(e) {
-        const cell = e.target.closest('td[data-tooltip]');
-        if (cell && tooltip.style.display === 'block') {
-            positionTooltip(e, tooltip);
-        }
-    });
-    
-    document.addEventListener('mouseout', function(e) {
-        const cell = e.target.closest('td[data-tooltip]');
-        if (cell && !e.relatedTarget?.closest('td[data-tooltip]')) {
-            tooltip.style.display = 'none';
-        }
-    });
-    
-    function positionTooltip(e, tooltip) {
-        const x = e.clientX;
-        const y = e.clientY;
-        const tooltipWidth = 300;
-        const tooltipHeight = tooltip.offsetHeight || 200;
-        
-        let left = x + 15;
-        let top = y + 15;
-        
-        // Ajuster si dépasse à droite
-        if (left + tooltipWidth > window.innerWidth) {
-            left = x - tooltipWidth - 15;
-        }
-        
-        // Ajuster si dépasse en bas
-        if (top + tooltipHeight > window.innerHeight) {
-            top = y - tooltipHeight - 15;
-        }
-        
-        tooltip.style.left = left + 'px';
-        tooltip.style.top = top + 'px';
-    }
-});
-</script>
 """, unsafe_allow_html=True)
 
 # ==================================================
@@ -333,13 +300,23 @@ if st.session_state.page == "apps":
     clean_data = [{"Nom": i.get('nom', ''), "Ordre": i.get('ordre', 0)} for i in st.session_state.apps_data]
     df_apps = pd.DataFrame(clean_data if clean_data else None, columns=["Nom", "Ordre"])
     edited_apps = st.data_editor(df_apps, num_rows="dynamic", use_container_width=True, hide_index=True, key="ed_apps")
-    if st.button("💾 Sauvegarder"):
-        save_apps_db(edited_apps.sort_values(by="Ordre"))
-        del st.session_state.data_loaded; st.rerun()
+    
+    col1, col2 = st.columns([1, 4])
+    with col1:
+        save_btn = st.button("💾 Sauvegarder", type="primary", use_container_width=True)
+    
+    if save_btn:
+        with st.spinner("Sauvegarde en cours..."):
+            save_apps_db(edited_apps.sort_values(by="Ordre"))
+            st.success("✅ Applications sauvegardées avec succès !")
+            time.sleep(1)
+            del st.session_state.data_loaded
+            st.rerun()
 
 elif st.session_state.page == "events":
     st.title("📝 Gestion des Événements")
-    if not st.session_state.apps: st.warning("Ajoutez des apps.")
+    if not st.session_state.apps: 
+        st.warning("Ajoutez des apps.")
     else:
         df_evts = pd.DataFrame(st.session_state.events if st.session_state.events else None)
         cols = ["app", "env", "type", "d1", "d2", "h1", "h2", "comment"]
@@ -348,13 +325,23 @@ elif st.session_state.page == "events":
                                      column_config={"app": st.column_config.SelectboxColumn("App", options=st.session_state.apps),
                                                     "env": st.column_config.SelectboxColumn("Env", options=["PROD", "PRÉPROD", "RECETTE"]),
                                                     "type": st.column_config.SelectboxColumn("Type", options=["MEP", "INCIDENT", "MAINTENANCE", "TEST", "MORATOIRE"])}, key="ed_evts")
-        if st.button("💾 Sauvegarder"):
-            cleaned = []
-            for _, r in edited_evts.iterrows():
-                if pd.notnull(r["app"]) and pd.notnull(r["d1"]):
-                    d2 = r["d2"] if pd.notnull(r["d2"]) else r["d1"]
-                    cleaned.append({"app": r["app"], "env": r["env"], "type": r["type"], "d1": r["d1"], "d2": d2, "h1": r.get("h1","00:00"), "h2": r.get("h2","23:59"), "comment": str(r.get("comment",""))})
-            save_events_db(cleaned); del st.session_state.data_loaded; st.rerun()
+        
+        col1, col2 = st.columns([1, 4])
+        with col1:
+            save_btn = st.button("💾 Sauvegarder", type="primary", use_container_width=True)
+        
+        if save_btn:
+            with st.spinner("Sauvegarde en cours..."):
+                cleaned = []
+                for _, r in edited_evts.iterrows():
+                    if pd.notnull(r["app"]) and pd.notnull(r["d1"]):
+                        d2 = r["d2"] if pd.notnull(r["d2"]) else r["d1"]
+                        cleaned.append({"app": r["app"], "env": r["env"], "type": r["type"], "d1": r["d1"], "d2": d2, "h1": r.get("h1","00:00"), "h2": r.get("h2","23:59"), "comment": str(r.get("comment",""))})
+                save_events_db(cleaned)
+                st.success("✅ Événements sauvegardés avec succès !")
+                time.sleep(1)
+                del st.session_state.data_loaded
+                st.rerun()
 
 elif st.session_state.page == "planning":
     st.title(f"📅 Planning Visuel {sel_year}")
@@ -436,24 +423,26 @@ elif st.session_state.page == "planning":
                         
                         content = f'<div class="event-cell {t_cls}">{t_raw[:3]}</div>'
                         
-                        # Construction du tooltip (stocké en attribut data)
+                        # Construction du tooltip
                         dur = (ev["d2"] - ev["d1"]).days + 1
-                        comment_text = str(ev.get('comment', '-')).replace('"', '&quot;').replace("'", '&#39;').replace('<', '&lt;').replace('>', '&gt;')
+                        comment_text = str(ev.get('comment', '-')).replace('<', '&lt;').replace('>', '&gt;')
                         
-                        tooltip_data = f'''<strong style="color:#60a5fa; font-size:13px; display:block; margin-bottom:8px;">📋 {ev['type']}</strong>
+                        tooltip_content = f'''<div class="tooltip-box">
+<strong style="color:#60a5fa; font-size:13px; display:block; margin-bottom:8px;">📋 {ev['type']}</strong>
 <span class="tooltip-label">📱 App:</span> {ev['app']}<br>
 <span class="tooltip-label">⏰ Heures:</span> {ev.get('h1','00:00')} - {ev.get('h2','23:59')}<br>
 <span class="tooltip-label">📅 Dates:</span> {ev['d1'].strftime('%d/%m')} au {ev['d2'].strftime('%d/%m')}<br>
 <span class="tooltip-label">⏱️ Durée:</span> {dur} jour(s)<br>
-{f'<span class="tooltip-label">🎉 Férié:</span> {h_name}<br>' if h_name else ''}<span class="tooltip-label">💬 Note:</span> {comment_text if comment_text != '-' else '<i>Aucune</i>'}'''
+{f'<span class="tooltip-label">🎉 Férié:</span> {h_name}<br>' if h_name else ''}<span class="tooltip-label">💬 Note:</span> {comment_text if comment_text != '-' else '<i>Aucune</i>'}
+</div>'''
                         
-                        # Assemblage de la cellule avec data-tooltip
+                        # Assemblage de la cellule avec tooltip
                         class_str = " ".join(td_class) if td_class else ""
-                        html += f'<td class="{class_str}" data-tooltip=\'{tooltip_data}\'><div class="tooltip-wrapper">{content}</div></td>'
+                        html += f'<td class="{class_str} has-tooltip">{content}{tooltip_content}</td>'
                     else:
                         # Cellule sans événement
                         class_str = " ".join(td_class) if td_class else ""
-                        html += f'<td class="{class_str}"><div class="tooltip-wrapper">{content}</div></td>'
+                        html += f'<td class="{class_str}">{content}</td>'
                 
                 html += '</tr>'
             
