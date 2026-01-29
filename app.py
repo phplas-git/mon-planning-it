@@ -4,56 +4,43 @@ import calendar
 from datetime import date
 
 # ==================================================
-# CONFIGURATION PAGE
+# 1. CONFIGURATION
 # ==================================================
 st.set_page_config(page_title="Planning IT Pro", layout="wide")
 
-# ==================================================
-# JOURS FÉRIÉS 2026 (France)
-# ==================================================
+# Jours fériés 2026
 JOURS_FERIES_2026 = [
-    date(2026, 1, 1),   # Nouvel an
-    date(2026, 4, 6),   # Lundi de Pâques
-    date(2026, 5, 1),   # Fête du travail
-    date(2026, 5, 8),   # Victoire 1945
-    date(2026, 5, 14),  # Ascension
-    date(2026, 5, 25),  # Lundi de Pentecôte
-    date(2026, 7, 14),  # Fête nationale
-    date(2026, 8, 15),  # Assomption
-    date(2026, 11, 1),  # Toussaint
-    date(2026, 11, 11), # Armistice
-    date(2026, 12, 25), # Noël
+    date(2026, 1, 1), date(2026, 4, 6), date(2026, 5, 1), date(2026, 5, 8),
+    date(2026, 5, 14), date(2026, 5, 25), date(2026, 7, 14), date(2026, 8, 15),
+    date(2026, 11, 1), date(2026, 11, 11), date(2026, 12, 25),
 ]
 
-# ==================================================
-# SESSION STATE
-# ==================================================
-if "apps" not in st.session_state:
-    st.session_state.apps = []
-
-if "events" not in st.session_state:
-    st.session_state.events = []
+# Initialisation des données
+if "apps" not in st.session_state: st.session_state.apps = []
+if "events" not in st.session_state: st.session_state.events = []
 
 # ==================================================
-# SIDEBAR
+# 2. BARRE LATÉRALE (ADMIN)
 # ==================================================
 with st.sidebar:
-    st.title("⚙️ Admin")
-
-    # ---- Ajouter Application
-    with st.form("add_app", clear_on_submit=True):
-        new_app = st.text_input("Application").upper().strip()
-        if st.form_submit_button("Ajouter") and new_app:
-            if new_app not in st.session_state.apps:
-                st.session_state.apps.append(new_app)
-                st.rerun()
+    st.header("⚙️ Admin")
+    
+    # Ajout App
+    with st.expander("Gestion Applications", expanded=True):
+        with st.form("add_app", clear_on_submit=True):
+            new_app = st.text_input("Nom de l'App").upper().strip()
+            if st.form_submit_button("Ajouter") and new_app:
+                if new_app not in st.session_state.apps:
+                    st.session_state.apps.append(new_app)
+                    st.rerun()
 
     st.divider()
 
-    # ---- Ajouter Événement
+    # Ajout Event
+    st.subheader("Nouvel Événement")
     if st.session_state.apps:
         with st.form("add_event", clear_on_submit=True):
-            f_app = st.selectbox("App", st.session_state.apps)
+            f_app = st.selectbox("App", sorted(st.session_state.apps))
             f_env = st.selectbox("Env", ["PROD", "PRÉPROD", "RECETTE"])
             f_type = st.selectbox("Type", ["MEP", "INCIDENT", "MAINTENANCE", "TEST", "MORATOIRE"])
             f_comm = st.text_area("Détails")
@@ -63,157 +50,178 @@ with st.sidebar:
 
             if st.form_submit_button("Enregistrer"):
                 st.session_state.events.append({
-                    "app": f_app,
-                    "env": f_env,
-                    "type": f_type,
-                    "d1": d1,
-                    "d2": d2,
-                    "comment": f_comm
+                    "app": f_app, "env": f_env, "type": f_type,
+                    "d1": d1, "d2": d2, "comment": f_comm
                 })
-                st.success("Événement enregistré")
+                st.success("Enregistré !")
                 st.rerun()
+    else:
+        st.info("Ajoutez d'abord une application.")
 
-    if st.button("Tout effacer"):
-        st.session_state.apps = []
-        st.session_state.events = []
+    st.divider()
+    if st.button("🗑️ Reset Tout"):
+        st.session_state.apps, st.session_state.events = [], []
         st.rerun()
 
 # ==================================================
-# MAIN
-# ==================================================
-st.title("📅 Planning IT – 2026")
-env_selected = st.radio("Vue :", ["PROD", "PRÉPROD", "RECETTE"], horizontal=True)
-
-months = [
-    "Janvier","Février","Mars","Avril","Mai","Juin",
-    "Juillet","Août","Septembre","Octobre","Novembre","Décembre"
-]
-tabs = st.tabs(months)
-
-# ==================================================
-# STYLE & TOOLTIP CSS
+# 3. STYLE CSS (LE DESIGN "JOLI")
 # ==================================================
 css = """
 <style>
+    /* Conteneur global du tableau */
+    .planning-container {
+        font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+        font-size: 13px;
+        overflow-x: auto;
+        border-radius: 8px;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        border: 1px solid #e0e0e0;
+        margin-bottom: 20px;
+    }
+
     .planning-table {
         width: 100%;
-        border-collapse: collapse;
-        font-size: 12px;
-        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-        table-layout: fixed;
+        border-collapse: separate; /* Permet les bordures arrondies */
+        border-spacing: 0;
+        background-color: #ffffff;
     }
+
+    /* --- EN-TÊTES (Gris bleuté) --- */
     .planning-table th {
-        border: 1px solid #ddd;
-        padding: 8px;
-        background-color: #f2f2f2;
-        color: #000000 !important; /* Force le texte en noir pour les headers */
-        font-weight: bold;
+        background-color: #f1f5f9; /* Gris très clair bleuté */
+        color: #1e293b; /* Bleu nuit presque noir */
+        padding: 12px 5px;
         text-align: center;
+        border-right: 1px solid #e2e8f0;
+        border-bottom: 2px solid #cbd5e1;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
         font-size: 11px;
     }
+
+    /* Colonne Application (En-tête et Cellules) */
     .planning-table th.app-header {
-        width: 120px;
         text-align: left;
-    }
-    .planning-table td {
-        border: 1px solid #ddd;
-        padding: 6px;
-        text-align: center;
-        font-weight: bold;
-        position: relative;
-        height: 35px;
-        cursor: pointer;
-        color: #000000; /* Texte noir par défaut dans les cases */
-    }
-    .planning-table td.app-name {
-        text-align: left;
-        font-weight: bold;
-        background-color: #f9f9f9;
-        color: #000000 !important; /* Force le texte en noir pour le nom des apps */
-    }
-    .planning-table td.weekend {
-        background-color: #dcdcdc !important; /* Gris un peu plus foncé pour voir la différence */
-    }
-    .planning-table td.ferie {
-        background-color: #FFE6F0;
-    }
-    .planning-table td.mep {
-        background-color: #0070C0;
-        color: white;
-    }
-    .planning-table td.inc {
-        background-color: #FF0000;
-        color: white;
-    }
-    .planning-table td.mai {
-        background-color: #FFC000;
-        color: black; /* Maintenance en noir car fond jaune */
-    }
-    .planning-table td.tes {
-        background-color: #00B050;
-        color: white;
-    }
-    .planning-table td.mor {
-        background-color: #9600C8;
-        color: white;
+        padding-left: 15px;
+        min-width: 120px;
+        position: sticky;
+        left: 0;
+        background-color: #f1f5f9;
+        z-index: 10;
+        border-right: 2px solid #cbd5e1;
     }
     
-    /* Tooltip */
+    .planning-table td.app-name {
+        background-color: #f8fafc; /* Légèrement différent pour les lignes */
+        color: #0f172a;
+        font-weight: 700;
+        text-align: left;
+        padding-left: 15px;
+        border-right: 2px solid #cbd5e1;
+        border-bottom: 1px solid #e2e8f0;
+        position: sticky;
+        left: 0;
+        z-index: 5;
+    }
+
+    /* --- CELLULES DE JOURS (Fond Blanc) --- */
+    .planning-table td {
+        background-color: #ffffff; /* BLANC PUR demandé */
+        color: #334155;
+        text-align: center;
+        padding: 0;
+        height: 45px; /* Hauteur confortable */
+        border-right: 1px solid #f1f5f9;
+        border-bottom: 1px solid #f1f5f9;
+        transition: background-color 0.2s;
+        cursor: pointer;
+    }
+    
+    .planning-table td:hover {
+        background-color: #f8fafc; /* Effet survol léger */
+    }
+
+    /* --- WEEK-ENDS (Gris marqué) --- */
+    .planning-table td.weekend {
+        background-color: #e2e8f0 !important; /* Gris moyen */
+        background-image: repeating-linear-gradient(45deg, transparent, transparent 5px, rgba(255,255,255,0.5) 5px, rgba(255,255,255,0.5) 10px);
+    }
+
+    /* --- JOURS FÉRIÉS (Rose pâle) --- */
+    .planning-table td.ferie {
+        background-color: #fff1f2 !important;
+        border-bottom: 2px solid #fda4af;
+    }
+
+    /* --- TYPES D'ÉVÉNEMENTS (Couleurs vives) --- */
+    .event-cell {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 100%;
+        height: 100%;
+        font-weight: bold;
+        font-size: 10px;
+        color: white;
+        box-shadow: inset 0 0 0 1px rgba(255,255,255,0.2);
+    }
+    .mep { background-color: #0ea5e9; } /* Bleu Cyan */
+    .inc { background-color: #ef4444; } /* Rouge */
+    .mai { background-color: #f59e0b; color: black; } /* Orange/Jaune */
+    .test { background-color: #10b981; } /* Vert Emeraude */
+    .mor { background-color: #8b5cf6; } /* Violet */
+
+    /* --- TOOLTIP (Info-bulle Moderne) --- */
     .tooltip {
         position: relative;
-        display: inline-block;
         width: 100%;
         height: 100%;
     }
     .tooltip .tooltiptext {
         visibility: hidden;
-        width: 300px;
-        background-color: #333;
+        width: 250px;
+        background-color: #1e293b; /* Fond sombre pro */
         color: #fff;
         text-align: left;
         border-radius: 6px;
-        padding: 12px;
+        padding: 10px;
         position: absolute;
-        z-index: 9999;
-        bottom: 125%;
+        z-index: 100;
+        bottom: 100%;
         left: 50%;
-        margin-left: -150px;
+        transform: translateX(-50%);
         opacity: 0;
         transition: opacity 0.3s;
-        font-size: 13px;
-        line-height: 1.6;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.3);
-        font-weight: normal;
-    }
-    .tooltip .tooltiptext::after {
-        content: "";
-        position: absolute;
-        top: 100%;
-        left: 50%;
-        margin-left: -5px;
-        border-width: 5px;
-        border-style: solid;
-        border-color: #333 transparent transparent transparent;
+        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+        font-size: 12px;
+        line-height: 1.5;
+        pointer-events: none;
     }
     .tooltip:hover .tooltiptext {
         visibility: visible;
         opacity: 1;
     }
-    .tooltip-label {
-        display: block;
+    .badge {
+        display: inline-block;
+        padding: 2px 6px;
+        border-radius: 4px;
+        font-size: 10px;
         font-weight: bold;
-        margin-top: 8px;
-        color: #4CAF50;
-    }
-    .tooltip-label:first-child {
-        margin-top: 0;
+        margin-bottom: 5px;
     }
 </style>
 """
 
 # ==================================================
-# TABLES PAR MOIS
+# 4. GÉNÉRATION DU PLANNING HTML
 # ==================================================
+st.title("📅 Planning IT – 2026")
+env_selected = st.radio("Secteur :", ["PROD", "PRÉPROD", "RECETTE"], horizontal=True)
+
+months = ["Janvier","Février","Mars","Avril","Mai","Juin","Juillet","Août","Septembre","Octobre","Novembre","Décembre"]
+tabs = st.tabs(months)
+
 for i, tab in enumerate(tabs):
     with tab:
         year = 2026
@@ -222,92 +230,89 @@ for i, tab in enumerate(tabs):
         dates = [date(year, month, d) for d in range(1, nb_days + 1)]
 
         if not st.session_state.apps:
-            st.info("Ajoutez une application pour commencer.")
+            st.info("👋 Aucune application. Ajoutez-en une dans le menu à gauche.")
             continue
 
         apps = sorted(st.session_state.apps)
 
-        # ---- Création du tableau HTML avec tooltips
-        html = css + '<table class="planning-table"><thead><tr><th class="app-header">Application</th>'
+        # Début du tableau
+        html = css + '<div class="planning-container"><table class="planning-table">'
         
-        # En-têtes des jours
+        # --- HEADER (Jours) ---
+        html += '<thead><tr><th class="app-header">Application</th>'
         for d in dates:
-            day_name = ["L", "M", "M", "J", "V", "S", "D"][d.weekday()]
-            html += f'<th>{d.day}<br><small>{day_name}</small></th>'
+            day_letter = ["L", "M", "M", "J", "V", "S", "D"][d.weekday()]
+            # On met le numéro en gros et la lettre en petit
+            html += f'<th>{d.day}<div style="font-size:9px; color:#64748b;">{day_letter}</div></th>'
         html += '</tr></thead><tbody>'
 
-        # Lignes par application
+        # --- CORPS (Lignes Apps) ---
         for app in apps:
             html += f'<tr><td class="app-name">{app}</td>'
             
             for d in dates:
-                # Déterminer le type de cellule
                 classes = []
-                cell_content = ""
-                tooltip_content = ""
+                content = ""
+                tooltip_html = ""
                 
-                # Weekend
-                if d.weekday() >= 5:
-                    classes.append("weekend")
-                    # Pas de point, juste la couleur de fond définie dans le CSS
-                    cell_content = "" 
+                # Gestion Weekend
+                if d.weekday() >= 5: classes.append("weekend")
                 
-                # Jour férié
+                # Gestion Férié
                 if d in JOURS_FERIES_2026:
                     classes.append("ferie")
-                    if not cell_content:
-                        cell_content = "🎉"
-                
-                # Chercher un événement
-                event_found = None
+                    if not content: content = "★"
+
+                # Recherche Événement
+                found_ev = None
                 for ev in st.session_state.events:
                     if ev["app"] == app and ev["env"] == env_selected:
                         if ev["d1"] <= d <= ev["d2"]:
-                            event_found = ev
+                            found_ev = ev
                             break
                 
-                if event_found:
-                    ev = event_found
-                    type_short = ev["type"][:3].upper()
-                    cell_content = type_short
+                # Construction Cellule
+                if found_ev:
+                    type_cls = ""
+                    if found_ev["type"] == "MEP": type_cls = "mep"
+                    elif found_ev["type"] == "INCIDENT": type_cls = "inc"
+                    elif found_ev["type"] == "MAINTENANCE": type_cls = "mai"
+                    elif found_ev["type"] == "TEST": type_cls = "test"
+                    elif found_ev["type"] == "MORATOIRE": type_cls = "mor"
                     
-                    # Classes CSS selon le type
-                    if ev["type"] == "MEP":
-                        classes.append("mep")
-                    elif ev["type"] == "INCIDENT":
-                        classes.append("inc")
-                    elif ev["type"] == "MAINTENANCE":
-                        classes.append("mai")
-                    elif ev["type"] == "TEST":
-                        classes.append("tes")
-                    elif ev["type"] == "MORATOIRE":
-                        classes.append("mor")
+                    short_txt = found_ev["type"][:3]
                     
-                    # Contenu du tooltip
-                    duree = (ev['d2'] - ev['d1']).days + 1
-                    tooltip_content = f'''
-                    <span class="tooltiptext">
-                        <span class="tooltip-label">📱 Application:</span> {ev["app"]}
-                        <span class="tooltip-label">🌐 Environnement:</span> {ev["env"]}
-                        <span class="tooltip-label">🏷️ Type:</span> {ev["type"]}
-                        <span class="tooltip-label">📅 Période:</span> Du {ev["d1"].strftime("%d/%m/%Y")} au {ev["d2"].strftime("%d/%m/%Y")}
-                        <span class="tooltip-label">⏱️ Durée:</span> {duree} jour(s)
-                        {f'<span class="tooltip-label">💬 Commentaire:</span> {ev["comment"]}' if ev["comment"] else ''}
-                    </span>
-                    '''
+                    # Tooltip HTML
+                    tooltip_html = f"""
+                    <div class="tooltiptext">
+                        <span class="badge {type_cls}" style="color:white; background:rgba(255,255,255,0.2);">{found_ev['type']}</span><br>
+                        <strong>{found_ev['app']}</strong><br>
+                        Du {found_ev['d1'].strftime('%d/%m')} au {found_ev['d2'].strftime('%d/%m')}<br>
+                        <em>{found_ev['comment'] if found_ev['comment'] else 'Aucun détail'}</em>
+                    </div>
+                    """
+                    
+                    content = f'<div class="event-cell {type_cls}">{short_txt}</div>'
                 
-                class_str = ' '.join(classes) if classes else ''
-                
-                # Si on a un tooltip (c'est un event), on l'enrobe. Sinon cellule simple.
-                if tooltip_content:
-                    html += f'<td class="{class_str}"><div class="tooltip">{cell_content}{tooltip_content}</div></td>'
+                # Assemblage final de la case
+                td_cls = " ".join(classes)
+                if tooltip_html:
+                    html += f'<td class="{td_cls}"><div class="tooltip">{content}{tooltip_html}</div></td>'
                 else:
-                    html += f'<td class="{class_str}">{cell_content}</td>'
+                    html += f'<td class="{td_cls}">{content}</td>'
             
             html += '</tr>'
         
-        html += '</tbody></table>'
+        html += '</tbody></table></div>'
         
         st.markdown(html, unsafe_allow_html=True)
         
-        st.caption("💡 Astuce : Survolez une cellule d'événement pour voir tous les détails")
+        # Légende propre
+        st.markdown("""
+        <div style="display:flex; gap:15px; font-size:12px; margin-top:10px; color:#64748b;">
+            <span style="display:flex; align-items:center;"><div style="width:10px; height:10px; background:#0ea5e9; margin-right:5px; border-radius:2px;"></div> MEP</span>
+            <span style="display:flex; align-items:center;"><div style="width:10px; height:10px; background:#ef4444; margin-right:5px; border-radius:2px;"></div> INCIDENT</span>
+            <span style="display:flex; align-items:center;"><div style="width:10px; height:10px; background:#f59e0b; margin-right:5px; border-radius:2px;"></div> MAINTENANCE</span>
+            <span style="display:flex; align-items:center;"><div style="width:10px; height:10px; background:#e2e8f0; margin-right:5px; border-radius:2px;"></div> Week-End</span>
+        </div>
+        """, unsafe_allow_html=True)
