@@ -36,8 +36,8 @@ def load_data():
         for ev in evts_data:
             ev['d1'] = pd.to_datetime(ev['d1']).date()
             ev['d2'] = pd.to_datetime(ev['d2']).date()
-            if 'h1' not in ev or not ev['h1']: ev['h1'] = "00:00"
-            if 'h2' not in ev or not ev['h2']: ev['h2'] = "23:59"
+            if 'h1' not in ev: ev['h1'] = "00:00"
+            if 'h2' not in ev: ev['h2'] = "23:59"
         return apps_names, apps_full, evts_data
     except Exception as e:
         st.error(f"Erreur lecture : {e}")
@@ -82,22 +82,21 @@ if "page" not in st.session_state: st.session_state.page = "planning"
 st.markdown("""
 <style>
     .planning-wrap { overflow-x: auto; padding-bottom: 150px; }
-    .planning-table { width: 100%; border-collapse: separate; border-spacing: 0; background-color: #fff; border: 1px solid #e2e8f0; border-radius: 8px; font-family: sans-serif; font-size: 13px; table-layout: fixed; }
-    .planning-table th { background-color: #f8fafc; color: #334155; padding: 10px 5px; text-align: center; border-right: 1px solid #e2e8f0; border-bottom: 2px solid #cbd5e1; font-size: 11px; }
+    .planning-table { width: 100%; border-collapse: separate; border-spacing: 0; background-color: #fff; border: 1px solid #e2e8f0; border-radius: 8px; font-family: sans-serif; font-size: 12px; table-layout: fixed; }
+    .planning-table th { background-color: #f8fafc; color: #334155; padding: 10px 2px; text-align: center; border-right: 1px solid #e2e8f0; border-bottom: 2px solid #cbd5e1; }
     .planning-table th.app-header { text-align: left; padding-left: 15px; width: 150px; position: sticky; left: 0; z-index: 30; background-color: #f1f5f9 !important; border-right: 2px solid #cbd5e1; }
     .planning-table td.app-name { background-color: #f8fafc !important; color: #0f172a !important; font-weight: 600; text-align: left; padding-left: 15px; position: sticky; left: 0; z-index: 20; border-right: 2px solid #cbd5e1; }
     .today-col { background-color: #eff6ff !important; border-left: 1px solid #3b82f6 !important; border-right: 1px solid #3b82f6 !important; }
     th.today-header { background-color: #3b82f6 !important; color: white !important; }
-    .planning-table td { text-align: center; padding: 0; height: 40px; border-right: 1px solid #f1f5f9; border-bottom: 1px solid #f1f5f9; position: relative; }
-    .planning-table td.weekend { background-color: #f8fafc !important; border-right: 1px solid #e2e8f0; }
-    .weekend-day { background-color: #f1f5f9 !important; }
+    .planning-table td { text-align: center; padding: 0; height: 38px; border-right: 1px solid #f1f5f9; border-bottom: 1px solid #f1f5f9; position: relative; }
+    .planning-table td.weekend { background-color: #f1f5f9 !important; }
     .planning-table td.ferie { background-color: #FFE6F0 !important; }
-    .event-cell { display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; color: white; font-weight: bold; font-size: 10px; }
+    .event-cell { display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; color: white; font-weight: bold; font-size: 9px; line-height: 1; }
     .mep { background-color: #0070C0; } .inc { background-color: #FF0000; } .mai { background-color: #FFC000; color: black; } .test { background-color: #00B050; } .mor { background-color: #9600C8; }
-    .planning-table td:hover { background-color: #f1f5f9; z-index: 50; }
-    .tooltip-content { visibility: hidden; width: 250px; background-color: #1e293b; color: #fff; text-align: left; border-radius: 6px; padding: 10px; position: absolute; bottom: 120%; left: 50%; transform: translateX(-50%); opacity: 0; transition: opacity 0.2s; box-shadow: 0 10px 15px rgba(0,0,0,0.3); font-size: 12px; z-index: 9999; pointer-events: none; border: 1px solid #475569; }
+    .planning-table td:hover { background-color: #f8fafc; z-index: 50; }
+    .tooltip-content { visibility: hidden; width: 240px; background-color: #1e293b; color: #fff; text-align: left; border-radius: 6px; padding: 10px; position: absolute; bottom: 125%; left: 50%; transform: translateX(-50%); opacity: 0; transition: opacity 0.2s; box-shadow: 0 10px 15px rgba(0,0,0,0.3); font-size: 11px; z-index: 9999; pointer-events: none; border: 1px solid #475569; }
     .planning-table td:hover .tooltip-content { visibility: visible; opacity: 1; }
-    .tooltip-label { font-weight: bold; color: #4ade80; margin-right: 5px; }
+    .tooltip-label { font-weight: bold; color: #4ade80; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -110,8 +109,8 @@ with st.sidebar:
     if st.button("📝 Gérer Événements", use_container_width=True): st.session_state.page = "events"; st.rerun()
     if st.button("📱 Gérer Applications", use_container_width=True): st.session_state.page = "apps"; st.rerun()
     st.divider()
-    years_options = [2025, 2026, 2027, 2028, 2029]
-    sel_year = st.selectbox("Année", years_options, index=years_options.index(TODAY.year))
+    years = [2025, 2026, 2027, 2028]
+    sel_year = st.selectbox("Année", years, index=years.index(TODAY.year))
     st.divider()
     if st.button("🔄 Actualiser"): del st.session_state.data_loaded; st.rerun()
 
@@ -134,7 +133,7 @@ elif st.session_state.page == "events":
     else:
         df_evts = pd.DataFrame(st.session_state.events if st.session_state.events else None)
         cols_to_show = ["app", "env", "type", "d1", "d2", "h1", "h2", "comment"]
-        # Filtrage pour ne pas afficher ID et Created_at
+        # On ne garde que les colonnes métier pour l'affichage
         display_df = df_evts[cols_to_show] if not df_evts.empty else pd.DataFrame(columns=cols_to_show)
         
         edited_evts = st.data_editor(display_df, num_rows="dynamic", use_container_width=True, hide_index=True, 
@@ -154,24 +153,23 @@ elif st.session_state.page == "planning":
     env_sel = st.radio("Secteur :", ["PROD", "PRÉPROD", "RECETTE"], horizontal=True)
     fr_holidays = holidays.France(years=sel_year)
     
-    # Correction : Utilisation d'une clé pour que l'index de départ soit le mois actuel
-    current_m = TODAY.month - 1 if TODAY.year == sel_year else 0
     tabs = st.tabs(MONTHS_FR)
 
     for i, tab in enumerate(tabs):
         with tab:
             m = i + 1
-            days = calendar.monthrange(sel_year, m)[1]
-            dates_m = [date(sel_year, m, d) for d in range(1, days + 1)]
+            days_in_month = calendar.monthrange(sel_year, m)[1]
+            dates_m = [date(sel_year, m, d) for d in range(1, days_in_month + 1)]
             
             if not st.session_state.apps:
                 st.info("Aucune application.")
                 continue
 
+            # CONSTRUCTION TABLEAU
             html = '<div class="planning-wrap"><table class="planning-table"><thead><tr><th class="app-header">Application</th>'
             for d in dates_m:
                 th_cls = "today-header" if d == TODAY else ""
-                html += f'<th class="{th_cls}">{d.day}<br><small>{["L","M","M","J","V","S","D"][d.weekday()]}</small></th>'
+                html += f'<th class="{th_cls}">{d.day}<br>{["L","M","M","J","V","S","D"][d.weekday()]}</th>'
             html += '</tr></thead><tbody>'
 
             for app_n in st.session_state.apps:
@@ -194,15 +192,15 @@ elif st.session_state.page == "planning":
                         dur = (ev["d2"] - ev["d1"]).days + 1
                         
                         ttp = f"""<div class="tooltip-content">
-                            <span class="tooltip-label">📱 App:</span>{ev['app']}<br>
-                            <span class="tooltip-label">🕒 Heures:</span>{ev.get('h1','00:00')} - {ev.get('h2','23:59')}<br>
-                            <span class="tooltip-label">📅 Dates:</span>{ev['d1'].strftime('%d/%m')} au {ev['d2'].strftime('%d/%m')}<br>
-                            <span class="tooltip-label">⏱️ Durée:</span>{dur} j<br>
-                            {f"<span class='tooltip-label'>🎊 Férié:</span>{h_name}<br>" if h_name else ""}
-                            <span class="tooltip-label">💬 Note:</span>{ev.get('comment','-')}
+                            <span class="tooltip-label">App:</span> {ev['app']}<br>
+                            <span class="tooltip-label">🕒 Heures:</span> {ev.get('h1','00:00')} - {ev.get('h2','23:59')}<br>
+                            <span class="tooltip-label">📅 Dates:</span> {ev['d1'].strftime('%d/%m')} au {ev['d2'].strftime('%d/%m')}<br>
+                            <span class="tooltip-label">⏱️ Durée:</span> {dur} j<br>
+                            {f"<span class='tooltip-label'>🎊 Férié:</span> {h_name}<br>" if h_name else ""}
+                            <span class="tooltip-label">💬 Note:</span> {ev.get('comment','-')}
                         </div>"""
                     elif h_name:
-                        ttp = f'<div class="tooltip-content"><span class="tooltip-label">🎊 Férié:</span>{h_name}</div>'
+                        ttp = f'<div class="tooltip-content"><span class="tooltip-label">🎊 Férié:</span> {h_name}</div>'
                     
                     html += f'<td class="{" ".join(cls)}">{cnt}{ttp}</td>'
                 html += '</tr>'
