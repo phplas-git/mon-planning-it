@@ -4,7 +4,7 @@ import calendar
 from datetime import date, datetime
 from supabase import create_client, Client
 import time
-import holidays # <--- Nouvelle librairie pour les jours fériés
+import holidays
 
 # ==================================================
 # 1. CONFIGURATION & CONNEXION DB
@@ -72,7 +72,6 @@ def save_events_db(event_list):
 TODAY = date.today()
 MONTHS_FR = ["Janvier","Février","Mars","Avril","Mai","Juin","Juillet","Août","Septembre","Octobre","Novembre","Décembre"]
 
-# State Management
 if "data_loaded" not in st.session_state:
     an, af, ed = load_data()
     st.session_state.apps, st.session_state.apps_data, st.session_state.events = an, af, ed
@@ -114,32 +113,31 @@ with st.sidebar:
     if st.button("📱 Gérer Applications", use_container_width=True): st.session_state.page = "apps"; st.rerun()
     st.divider()
     
-    # SÉLECTEUR D'ANNÉE - Par défaut sur l'année en cours
-    current_year_idx = 1 # Correspond à 2026 dans la liste ci-dessous
+    # SÉLECTEUR D'ANNÉE
     selected_year = st.selectbox("Année de consultation", [2025, 2026, 2027, 2028, 2029], 
                                  index=[2025, 2026, 2027, 2028, 2029].index(TODAY.year))
     
     st.divider()
-    if st.button("🔄 Recharger depuis Cloud"): del st.session_state.data_loaded; st.rerun()
+    if st.button("🔄 Recharger depuis Cloud"): 
+        if "data_loaded" in st.session_state: del st.session_state.data_loaded
+        st.rerun()
 
 # ==================================================
 # 4. PAGES
 # ==================================================
 
-# --- GESTION APPS ---
 if st.session_state.page == "apps":
     st.title("📱 Gestion des Applications")
     clean_data = [{"Nom": i.get('nom', ''), "Ordre": i.get('ordre', 0)} for i in st.session_state.apps_data]
     df_apps = pd.DataFrame(clean_data if clean_data else None, columns=["Nom", "Ordre"])
-    
     edited_apps = st.data_editor(df_apps, num_rows="dynamic", use_container_width=True, hide_index=True, 
                                  column_config={"Nom": st.column_config.TextColumn("Nom", required=True), 
                                                 "Ordre": st.column_config.NumberColumn("Ordre", min_value=0, step=1, format="%d")}, key="ed_apps")
     if st.button("💾 Sauvegarder et Trier"):
         save_apps_db(edited_apps.sort_values(by="Ordre"))
-        del st.session_state.data_loaded; st.success("Applications mises à jour !"); time.sleep(1); st.rerun()
+        if "data_loaded" in st.session_state: del st.session_state.data_loaded
+        st.success("Applications mises à jour !"); time.sleep(1); st.rerun()
 
-# --- GESTION EVENTS ---
 elif st.session_state.page == "events":
     st.title("📝 Gestion des Événements")
     if not st.session_state.apps: st.warning("Créez des apps d'abord.")
@@ -161,9 +159,7 @@ elif st.session_state.page == "events":
             "h2": st.column_config.TextColumn("H. Fin", default="23:59"),
         }
 
-        cols_to_show = ["app", "env", "type", "d1", "d2", "h1", "h2", "comment"]
-        existing_cols = [c for c in cols_to_show if c in df_evts.columns]
-        
+        existing_cols = [c for c in ["app", "env", "type", "d1", "d2", "h1", "h2", "comment"] if c in df_evts.columns]
         edited_evts = st.data_editor(df_evts[existing_cols], num_rows="dynamic", use_container_width=True, hide_index=True, column_config=col_config, key="ed_evts")
         
         if st.button("💾 Sauvegarder"):
@@ -174,77 +170,97 @@ elif st.session_state.page == "events":
                         d2_val = r["d2"] if pd.notnull(r["d2"]) else r["d1"]
                         h1_val = r["h1"] if (pd.notnull(r["h1"]) and str(r["h1"]).strip() != "") else "00:00"
                         h2_val = r["h2"] if (pd.notnull(r["h2"]) and str(r["h2"]).strip() != "") else "23:59"
-                        cleaned.append({
-                            "app": r["app"], "env": r["env"], "type": r["type"], 
-                            "d1": r["d1"], "d2": d2_val, "h1": h1_val, "h2": h2_val,
-                            "comment": r["comment"] if pd.notnull(r["comment"]) else ""
-                        })
+                        cleaned.append({"app": r["app"], "env": r["env"], "type": r["type"], "d1": r["d1"], "d2": d2_val, "h1": h1_val, "h2": h2_val, "comment": r["comment"] if pd.notnull(r["comment"]) else ""})
                 save_events_db(cleaned)
                 st.session_state.events = cleaned; st.success("OK"); time.sleep(1); st.rerun()
 
-# --- PLANNING VISUEL ---
 elif st.session_state.page == "planning":
     st.title(f"📅 Planning Visuel {selected_year}")
     env_sel = st.radio("Secteur :", ["PROD", "PRÉPROD", "RECETTE"], horizontal=True)
-    
-    # Récupération automatique des jours fériés français
     fr_holidays = holidays.France(years=selected_year)
     
-    # FOCUS SUR LE MOIS ACTUEL
+    # Correction : On définit l'index du mois actuel pour l'UI
+    current_month_idx = TODAY.month - 1 if TODAY.year == selected_year else 0
     tabs = st.tabs(MONTHS_FR)
-    
-    # Astuce pour ouvrir le mois actuel par défaut via JavaScript/CSS est complexe dans st.tabs,
-    # On affiche donc une info si on est sur le "mauvais" mois au chargement initial.
-    
+
     for i, tab in enumerate(tabs):
         with tab:
+            # Construction robuste du tableau pour chaque mois
             m = i + 1
             days_in_month = calendar.monthrange(selected_year, m)[1]
-            dates = [date(selected_year, m, d) for d in range(1, days_in_month + 1)]
-            if not st.session_state.apps: st.info("Aucune donnée."); continue
+            dates_month = [date(selected_year, m, d) for d in range(1, days_in_month + 1)]
+            
+            if not st.session_state.apps:
+                st.info("Aucune application configurée.")
+                continue
 
-            html = '<div class="planning-wrap"><table class="planning-table"><thead><tr><th class="app-header">Application</th>'
-            for d in dates:
+            # Début du tableau HTML
+            html = '<div class="planning-wrap"><table class="planning-table">'
+            
+            # HEADER
+            html += '<thead><tr><th class="app-header">Application</th>'
+            for d in dates_month:
                 th_cls = "today-header" if d == TODAY else ""
-                html += f'<th class="{th_cls}">{d.day}<br><small>{["L","M","M","J","V","S","D"][d.weekday()]}</small></th>'
+                day_name = ["L","M","M","J","V","S","D"][d.weekday()]
+                html += f'<th class="{th_cls}">{d.day}<br><small>{day_name}</small></th>'
             html += '</tr></thead><tbody>'
 
-            for app in st.session_state.apps:
-                html += f'<tr><td class="app-name">{app}</td>'
-                for d in dates:
+            # LIGNES : On itère sur TOUTES les apps du session_state
+            for app_name in st.session_state.apps:
+                html += f'<tr><td class="app-name">{app_name}</td>'
+                
+                for d in dates_month:
                     cls, cnt, ttp = [], "", ""
+                    
+                    # Style Jour
                     if d == TODAY: cls.append("today-col")
                     if d.weekday() >= 5: cls.append("weekend")
                     
-                    # Vérification jour férié automatique
-                    if d in fr_holidays:
+                    # Fériés
+                    h_name = fr_holidays.get(d)
+                    if h_name:
                         cls.append("ferie")
                         cnt = "🎉"
-                        holiday_name = fr_holidays.get(d)
-                    else:
-                        holiday_name = None
+
+                    # Recherche d'un événement
+                    found = next((e for e in st.session_state.events if e["app"] == app_name and e["env"] == env_sel and e["d1"] <= d <= e["d2"]), None)
                     
-                    found = next((e for e in st.session_state.events if e["app"] == app and e["env"] == env_sel and e["d1"] <= d <= e["d2"]), None)
                     if found:
-                        t_cls = found["type"][:3].lower() if found["type"] != "MAINTENANCE" else "mai"
-                        if found["type"] == "TEST": t_cls = "test"
-                        cnt = f'<div class="event-cell {t_cls}">{found["type"][:3].upper()}</div>'
-                        delta = (found["d2"] - found["d1"]).days + 1
+                        # Détermination de la couleur
+                        t_raw = str(found["type"]).upper()
+                        t_cls = "mep" if "MEP" in t_raw else "inc" if "INC" in t_raw else "mai" if "MAI" in t_raw else "test" if "TEST" in t_raw else "mor"
+                        
+                        cnt = f'<div class="event-cell {t_cls}">{t_raw[:3]}</div>'
+                        dur = (found["d2"] - found["d1"]).days + 1
                         
                         ttp = f"""<div class="tooltip-content">
                             <span class="tooltip-label">📱 App:</span>{found["app"]}<br>
-                            <span class="tooltip-label">🕒 Heures:</span>De {found.get('h1','00:00')} à {found.get('h2','23:59')}<br>
+                            <span class="tooltip-label">🕒 Heures:</span>{found.get('h1','00:00')} - {found.get('h2','23:59')}<br>
                             <span class="tooltip-label">📅 Dates:</span>{found["d1"].strftime("%d/%m")} au {found["d2"].strftime("%d/%m")}<br>
-                            <span class="tooltip-label">⏱️ Durée:</span>{delta} j<br>
-                            {"<span class='tooltip-label'>🎊 Férié :</span>" + holiday_name + "<br>" if holiday_name else ""}
+                            <span class="tooltip-label">⏱️ Durée:</span>{dur} j<br>
+                            {f"<span class='tooltip-label'>🎊 Férié:</span>{h_name}<br>" if h_name else ""}
                             <span class="tooltip-label">💬 Note:</span>{found["comment"] if found["comment"] else "-"}
                         </div>"""
-                    elif holiday_name:
-                        # Tooltip spécifique pour les jours fériés sans événement
-                        ttp = f"""<div class="tooltip-content">
-                            <span class="tooltip-label">🎊 Jour Férié :</span>{holiday_name}
-                        </div>"""
+                    elif h_name:
+                        ttp = f'<div class="tooltip-content"><span class="tooltip-label">🎊 Férié:</span>{h_name}</div>'
                     
                     html += f'<td class="{" ".join(cls)}">{cnt}{ttp}</td>'
+                
                 html += '</tr>'
-            st.markdown(html + '</tbody></table></div>', unsafe_allow_html=True)
+            
+            # Fermeture propre du tableau
+            html += '</tbody></table></div>'
+            st.markdown(html, unsafe_allow_html=True)
+
+    # Légende en dehors des onglets
+    st.markdown("""
+    <div style="display:flex; gap:15px; font-size:12px; margin-top:10px; color:#64748b; justify-content: center;">
+        <span><span style="color:#0070C0">■</span> MEP</span>
+        <span><span style="color:#FF0000">■</span> INCIDENT</span>
+        <span><span style="color:#FFC000">■</span> MAINTENANCE</span>
+        <span><span style="color:#00B050">■</span> TEST</span>
+        <span><span style="color:#9600C8">■</span> MORATOIRE</span>
+        <span><span style="color:#e2e8f0">■</span> Week-End</span>
+        <span><span style="color:#FFE6F0">■</span> Férié</span>
+    </div>
+    """, unsafe_allow_html=True)
