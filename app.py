@@ -137,16 +137,27 @@ with st.sidebar:
 # --- PAGE APPS ---
 if st.session_state.page == "apps":
     st.title("📱 Gestion des Applications")
-    clean_data = [{"Nom": i.get('nom', ''), "Ordre": i.get('ordre', 0)} for i in st.session_state.apps_data]
-    df_apps = pd.DataFrame(clean_data if clean_data else columns=["Nom", "Ordre"])
+    st.info("Définissez l'ordre d'affichage (1, 2, 3...) dans la colonne 'Ordre'.")
     
-    edited_apps = st.data_editor(df_apps, num_rows="dynamic", use_container_width=True, hide_index=True, 
-                                 column_config={"Nom": st.column_config.TextColumn("Nom", required=True), 
-                                                "Ordre": st.column_config.NumberColumn("Ordre", min_value=0, step=1, format="%d")}, key="ed_apps")
-    if st.button("💾 Sauvegarder et Trier"):
-        save_apps_db(edited_apps.sort_values(by="Ordre"))
-        del st.session_state.data_loaded
-        st.success("Applications mises à jour !"); time.sleep(1); st.rerun()
+    # Correction de la syntaxe ici
+    clean_data = [{"Nom": i.get('nom', ''), "Ordre": i.get('ordre', 0)} for i in st.session_state.apps_data]
+    
+    if clean_data:
+        df_apps = pd.DataFrame(clean_data)
+    else:
+        df_apps = pd.DataFrame(columns=["Nom", "Ordre"])
+    
+    edited_apps = st.data_editor(
+        df_apps, 
+        num_rows="dynamic", 
+        use_container_width=True, 
+        hide_index=True, 
+        column_config={
+            "Nom": st.column_config.TextColumn("Nom", required=True), 
+            "Ordre": st.column_config.NumberColumn("Ordre", min_value=0, step=1, format="%d")
+        }, 
+        key="ed_apps"
+    )
 
 # --- PAGE EVENTS ---
 elif st.session_state.page == "events":
@@ -208,3 +219,4 @@ elif st.session_state.page == "planning":
                     html += f'<td class="{" ".join(cls)}">{cnt}{ttp}</td>'
                 html += '</tr>'
             st.markdown(html + '</tbody></table></div>', unsafe_allow_html=True)
+
