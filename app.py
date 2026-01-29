@@ -38,23 +38,21 @@ def load_data():
     return sorted(apps_data), evts_data
 
 def save_apps_db(app_list):
-    """Sauvegarde la liste des apps (Efface tout et réécrit)"""
-    # 1. On vide la table (DANGER en prod réelle, mais OK pour petit outil)
-    # Supabase ne permet pas le 'truncate' via l'API client facilement sans RLS off,
-    # on supprime donc ligne par ligne ou on utilise upsert.
-    # Méthode simple : On supprime tout ce qui n'est pas NULL (tout)
-    # Note: Pour faire propre, il faudrait gérer les IDs, mais ici on fait simple.
-    
-    # Récupérer les IDs existants pour les supprimer
-    current = supabase.table("applications").select("id").execute()
-    if current.data:
-        ids = [x['id'] for x in current.data]
-        supabase.table("applications").delete().in_("id", ids).execute()
-    
-    # Insérer les nouvelles
-    if app_list:
-        data_to_insert = [{"nom": name} for name in app_list]
-        supabase.table("applications").insert(data_to_insert).execute()
+    """Sauvegarde la liste des apps (Méthode Bulldozer)"""
+    if not supabase: return
+    try:
+        # 1. NETTOYAGE ROBUSTE
+        # On demande de supprimer toutes les lignes où l'ID n'est pas égal à 0.
+        # Comme les IDs commencent à 1, cela vide toute la table d'un coup.
+        supabase.table("applications").delete().neq("id", 0).execute()
+        
+        # 2. INSERTION
+        if app_list:
+            data_to_insert = [{"nom": name} for name in app_list]
+            supabase.table("applications").insert(data_to_insert).execute()
+            
+    except Exception as e:
+        st.error(f"❌ Erreur critique lors de la sauvegarde : {e}")
 
 def save_events_db(event_list):
     """Pareil pour les événements"""
@@ -331,3 +329,4 @@ elif st.session_state.page == "planning":
                 <span><span style="color:#FFE6F0">■</span> Férié</span>
             </div>
             """, unsafe_allow_html=True)
+
