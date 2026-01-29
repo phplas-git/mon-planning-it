@@ -1,23 +1,23 @@
 import streamlit as st
 import pandas as pd
+import plotly.express as px
+import numpy as np
 from datetime import datetime, timedelta, date
 
 # --- 1. CONFIGURATION ---
 st.set_page_config(page_title="Planning IT Pro", layout="wide")
 
-# Utilisation de la mémoire vive (Session State) pour éviter la boucle
+# Initialisation de la mémoire (RAM)
 if 'apps' not in st.session_state:
-    st.session_state.apps = ["PRAC"] # On en met une par défaut pour tester
+    st.session_state.apps = ["APPLICATION TEST"]
 if 'events' not in st.session_state:
     st.session_state.events = []
 
-st.title("🚀 Mon Planning IT - Mode Stable")
-
 # --- 2. BARRE LATÉRALE ---
 with st.sidebar:
-    st.header("⚙️ Configuration")
-    if st.button("🔄 Forcer l'actualisation"):
-        st.rerun()
+    st.title("⚙️ Configuration")
+    d_start = st.date_input("Vue à partir du", date(2026, 1, 1))
+    days_show = st.slider("Jours à afficher", 30, 120, 60)
     
     st.divider()
     
@@ -26,69 +26,88 @@ with st.sidebar:
         if st.button("Ajouter"):
             if new_a and new_a not in st.session_state.apps:
                 st.session_state.apps.append(new_a)
-                st.success("Ajoutée !")
+                st.toast(f"{new_a} ajouté !")
     
     st.divider()
     
     st.subheader("➕ Nouvel événement")
     with st.form("form_add", clear_on_submit=True):
         f_app = st.selectbox("Application", st.session_state.apps)
-        f_env = st.selectbox("Env", ["PROD", "PRÉPROD", "RECETTE"])
+        f_env = st.selectbox("Environnement", ["PROD", "PRÉPROD", "RECETTE"])
         f_type = st.selectbox("Type", ["MEP", "Incident", "Maintenance", "Test", "Moratoire"])
         f_d1 = st.date_input("Du")
         f_d2 = st.date_input("Au")
         if st.form_submit_button("Enregistrer"):
-            st.session_state.events.append({
-                'app': f_app, 'env': f_env, 'type': f_type, 'd1': f_d1, 'd2': f_d2
-            })
-            st.success("Enregistré !")
+            if f_app:
+                st.session_state.events.append({
+                    'app': f_app, 'env': f_env, 'type': f_type, 'd1': f_d1, 'd2': f_d2
+                })
+                st.success("Enregistré !")
 
-# --- 3. AFFICHAGE ---
-tab1, tab2, tab3 = st.tabs(["PROD", "PRÉPROD", "RECETTE"])
-
-def show_env(env_name):
+# --- 3. LOGIQUE D'AFFICHAGE ---
+def draw_grid(env_label):
     if not st.session_state.apps:
-        st.info("Ajoutez une application dans la barre latérale.")
+        st.info("Ajoutez une application pour commencer.")
         return
 
-    # Création d'un tableau de dates
-    start_date = date(2026, 1, 1)
-    dates = [start_date + timedelta(days=i) for i in range(31)] # On teste sur 31 jours
+    apps = sorted(st.session_state.apps, reverse=True)
+    df_ev = pd.DataFrame(st.session_state.events)
     
-    # Préparation des données pour le tableau
-    data = {"Application": sorted(st.session_state.apps)}
+    dates_list = [d_start + timedelta(days=x) for x in range(days_show)]
+    grid = np.zeros((len(apps), len(dates_list)))
+    hover_matrix = []
     
-    for d in dates:
-        col_name = d.strftime("%d/%m")
-        data[col_name] = []
-        for app in data["Application"]:
-            # On cherche si un événement existe pour ce jour/app/env
-            status = ""
-            if d.weekday() >= 5: status = "WE"
+    # Mapping couleurs : 0:Blanc, 1:MEP, 2:Incident, 3:Maint, 4:Test, 5:Mora, 6:Weekend
+    t_val = {"MEP": 1, "Incident": 2, "Maintenance": 3, "Test": 4, "Moratoire": 5}
+    
+    for i, app in enumerate(apps):
+        row_hover = []
+        for j, d in enumerate(dates_list):
+            val = 0
+            txt = f"<b>{app}</b><br>{d.strftime('%d/%m/%Y')}"
+            if d.weekday() >= 5:
+                val = 6
+                txt += " (WE)"
             
-            for ev in st.session_state.events:
-                if ev['app'] == app and ev['env'] == env_name:
-                    if ev['d1'] <= d <= ev['d2']:
-                        status = ev['type']
+            if not df_ev.empty:
+                # Filtrage des événements pour cette cellule
+                match = df_ev[(df_ev['app'] == app) & (df_ev['env'] == env_label) & (df_ev['d1'] <= d) & (df_ev['d2'] >= d)]
+                if not match.empty:
+                    val = t_val.get(match.iloc[0]['type'], 0)
+                    txt += f"<br>TYPE: {match.iloc[0]['type']}"
             
-            data[col_name].append(status)
+            grid[i, j] = val
+            row_hover.append(txt)
+        hover_matrix.append(row_hover)
 
-    df = pd.DataFrame(data)
+    colors = ["#FFFFFF", "#0070C0", "#FF0000", "#FFC000", "#00B050", "#9600C8", "#D9D9D9"]
+    fig = px.imshow(grid, x=[d.strftime("%d\n%b") for d in dates_list], y=apps,
+                    color_continuous_scale=colors, zmin=0, zmax=6, aspect="auto")
+
+    fig.update_traces(hovertemplate="%{customdata}<extra></extra>", customdata=hover_matrix)
+    fig.update_coloraxes(showscale=False)
+    fig.update_xaxes(side="top", showgrid=True, gridwidth=1, gridcolor='black', dtick=1)
+    fig.update_yaxes(showgrid=True, gridwidth=1, gridcolor='black', dtick=1)
     
-    # Affichage du tableau avec des couleurs
-    def color_cells(val):
-        color = 'white'
-        if val == "MEP": color = "#0070C0; color: white"
-        elif val == "Incident": color = "#FF0000; color: white"
-        elif val == "Maintenance": color = "#FFC000"
-        elif val == "Test": color = "#00B050; color: white"
-        elif val == "WE": color = "#D9D9D9"
-        return f'background-color: {color}'
+    # Marqueur aujourd'hui
+    today = date.today()
+    if d_start <= today <= (d_start + timedelta(days=days_show)):
+        idx = (today - d_start).days
+        fig.add_vline(x=idx, line_width=2, line_dash="dash", line_color="#FF4B4B")
 
-    st.dataframe(df.style.applymap(color_cells), height=400, use_container_width=True)
+    fig.update_layout(height=180 + (len(apps) * 35), margin=dict(l=0, r=0, t=20, b=0))
+    st.plotly_chart(fig, width='stretch', key=f"grid_{env_label}", config={'displayModeBar': False})
 
-with tab1: show_env("PROD")
-with tab2: show_env("PRÉPROD")
-with tab3: show_env("RECETTE")
+# --- 4. INTERFACE ---
+st.title("🚀 Planning IT Pro - 2026")
 
+# Légende
+l_cols = st.columns(6)
+legende = [("MEP","#0070C0"), ("Incident","#FF0000"), ("Maint.","#FFC000"), ("Test","#00B050"), ("Mora.","#9600C8"), ("WE","#D9D9D9")]
+for i, (n, c) in enumerate(legende):
+    l_cols[i].markdown(f'<div style="display:flex;align-items:center;"><div style="width:12px;height:12px;background:{c};border:1px solid #000;margin-right:5px;"></div><span style="font-size:11px;">{n}</span></div>', unsafe_allow_html=True)
 
+t_prod, t_pre, t_rec = st.tabs(["PROD", "PRÉPROD", "RECETTE"])
+with t_prod: draw_grid("PROD")
+with t_pre: draw_grid("PRÉPROD")
+with t_rec: draw_grid("RECETTE")
