@@ -9,7 +9,16 @@ import holidays
 # ==================================================
 # 1. CONFIGURATION & CONNEXION DB
 # ==================================================
-st.set_page_config(page_title="Planning IT Pro", layout="wide")
+st.set_page_config(
+    page_title="Planning IT Pro", 
+    layout="wide",
+    initial_sidebar_state="expanded",
+    menu_items={
+        'Get Help': None,
+        'Report a bug': None,
+        'About': None
+    }
+)
 
 @st.cache_resource
 def init_connection():
@@ -81,6 +90,15 @@ if "page" not in st.session_state: st.session_state.page = "planning"
 # ==================================================
 st.markdown("""
 <style>
+    /* MASQUER LE MENU STREAMLIT */
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    header {visibility: hidden;}
+    
+    /* Masquer le bouton "Deploy" et autres éléments du header */
+    .stDeployButton {display: none;}
+    button[kind="header"] {display: none;}
+    
     /* Container avec scroll vertical et horizontal */
     .planning-wrap { 
         overflow: auto; 
@@ -199,6 +217,7 @@ st.markdown("""
     .inc { background-color: #FF0000; } 
     .mai { background-color: #FFC000; color: black; } 
     .test { background-color: #00B050; } 
+    .tnr { background-color: #70AD47; }
     .mor { background-color: #9600C8; }
     
     /* TOOLTIP */
@@ -324,7 +343,7 @@ elif st.session_state.page == "events":
         edited_evts = st.data_editor(display_df, num_rows="dynamic", use_container_width=True, hide_index=True, 
                                      column_config={"app": st.column_config.SelectboxColumn("App", options=st.session_state.apps),
                                                     "env": st.column_config.SelectboxColumn("Env", options=["PROD", "PRÉPROD", "RECETTE"]),
-                                                    "type": st.column_config.SelectboxColumn("Type", options=["MEP", "INCIDENT", "MAINTENANCE", "TEST", "MORATOIRE"])}, key="ed_evts")
+                                                    "type": st.column_config.SelectboxColumn("Type", options=["MEP", "INCIDENT", "MAINTENANCE", "TEST", "TNR", "MORATOIRE"])}, key="ed_evts")
         
         col1, col2 = st.columns([1, 4])
         with col1:
@@ -416,6 +435,8 @@ elif st.session_state.page == "planning":
                             t_cls = "mai"
                         elif "TEST" in t_raw:
                             t_cls = "test"
+                        elif "TNR" in t_raw:
+                            t_cls = "tnr"
                         elif "MOR" in t_raw:
                             t_cls = "mor"
                         else:
