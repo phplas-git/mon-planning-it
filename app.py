@@ -92,4 +92,53 @@ for i, tab in enumerate(tabs):
                 for ev in st.session_state.events:
                     if ev['app'] == app and ev['env'] == env_selected:
                         if ev['d1'] <= d <= ev['d2']:
-                            val = ev['
+                            # C'est ici que l'erreur se produisait avant
+                            val = ev['type'][:3]
+                data[col].append(val)
+        
+        df = pd.DataFrame(data)
+        cf = {"App": st.column_config.TextColumn("App", pinned=True)}
+        for d in dates:
+            cf[str(d.day)] = st.column_config.TextColumn(str(d.day), width=35)
+
+        # --- TABLEAU INTERACTIF ---
+        response = st.dataframe(
+            df.style.map(style_val),
+            use_container_width=True,
+            hide_index=True,
+            column_config=cf,
+            on_select="rerun",
+            # Note bien les tirets '-' ici, c'est ce qui corrige l'erreur précédente
+            selection_mode=["single-row", "single-column"]
+        )
+        
+        # --- INTERACTION ---
+        if response.selection.rows and response.selection.columns:
+            r_idx = response.selection.rows[0]
+            c_name = response.selection.columns[0]
+            
+            if c_name != "App":
+                sel_app = apps[r_idx]
+                sel_day = int(c_name)
+                sel_date = date(year, month, sel_day)
+                
+                st.divider()
+                st.subheader(f"🔍 Détail : {sel_app} (Le {sel_day} {mois[i]})")
+                
+                found = False
+                for ev in st.session_state.events:
+                    if ev['app'] == sel_app and ev['env'] == env_selected:
+                        if ev['d1'] <= sel_date <= ev['d2']:
+                            found = True
+                            with st.container(border=True):
+                                c1, c2 = st.columns([1,4])
+                                c1.metric("TYPE", ev['type'])
+                                c2.markdown(f"📅 **Du {ev['d1'].strftime('%d/%m')} au {ev['d2'].strftime('%d/%m')}**")
+                                if ev['comment']:
+                                    c2.info(f"📝 {ev['comment']}")
+                                else:
+                                    c2.caption("Pas de commentaire.")
+                if not found:
+                    st.caption("Rien ce jour-là.")
+        else:
+            st.caption("👆 Cliquez sur une case colorée pour voir le détail.")
