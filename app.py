@@ -71,6 +71,7 @@ def style_val(val):
 
 for i, tab in enumerate(tabs):
     with tab:
+        # Si pas d'apps, message simple
         if not st.session_state.apps:
             st.info("Ajoutez une application pour commencer.")
             continue
@@ -83,6 +84,7 @@ for i, tab in enumerate(tabs):
         apps = sorted(st.session_state.apps)
         data = {"App": apps}
         
+        # Construction des données
         for d in dates:
             col = str(d.day)
             data[col] = []
@@ -96,12 +98,16 @@ for i, tab in enumerate(tabs):
                 data[col].append(val)
         
         df = pd.DataFrame(data)
+        
+        # Configuration des colonnes
         cf = {"App": st.column_config.TextColumn("App", pinned=True)}
         for d in dates:
             cf[str(d.day)] = st.column_config.TextColumn(str(d.day), width=35)
 
-        # --- C'EST ICI QUE JE FORCE L'IDENTIFIANT UNIQUE ---
-        unique_key = f"planning_table_{month}_{env_selected}"
+        # --- CORRECTION FINALE ICI ---
+        # On utilise une clé basée UNIQUEMENT sur l'index du tableau (i).
+        # "grid_0" sera toujours le tableau de Janvier, peu importe l'environnement.
+        # Cela empêche Streamlit de créer des doublons.
         
         response = st.dataframe(
             df.style.map(style_val),
@@ -110,10 +116,10 @@ for i, tab in enumerate(tabs):
             column_config=cf,
             on_select="rerun",
             selection_mode=["single-row", "single-column"],
-            key=unique_key  # <--- INDISPENSABLE
+            key=f"grid_tab_{i}"  # <--- CLÉ SIMPLE ET STABLE
         )
         
-        # --- INTERACTION ---
+        # --- INTERACTION (CLIC) ---
         if response.selection.rows and response.selection.columns:
             r_idx = response.selection.rows[0]
             c_name = response.selection.columns[0]
@@ -140,6 +146,7 @@ for i, tab in enumerate(tabs):
                                 else:
                                     c2.caption("Pas de commentaire.")
                 if not found:
-                    st.caption("Rien ce jour-là.")
+                    st.caption("Rien de prévu ce jour-là.")
         else:
             st.caption("👆 Cliquez sur une case colorée pour voir le détail.")
+
