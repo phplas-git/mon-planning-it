@@ -128,7 +128,9 @@ with st.sidebar:
     if st.button("📝 Gérer Événements", use_container_width=True): st.session_state.page = "events"; st.rerun()
     if st.button("📱 Gérer Applications", use_container_width=True): st.session_state.page = "apps"; st.rerun()
     st.divider()
-    if st.button("🔄 Recharger depuis Cloud"): del st.session_state.data_loaded; st.rerun()
+    if st.button("🔄 Recharger depuis Cloud"): 
+        if "data_loaded" in st.session_state: del st.session_state.data_loaded
+        st.rerun()
 
 # ==================================================
 # 4. PAGES
@@ -137,27 +139,23 @@ with st.sidebar:
 # --- PAGE APPS ---
 if st.session_state.page == "apps":
     st.title("📱 Gestion des Applications")
-    st.info("Définissez l'ordre d'affichage (1, 2, 3...) dans la colonne 'Ordre'.")
     
-    # Correction de la syntaxe ici
     clean_data = [{"Nom": i.get('nom', ''), "Ordre": i.get('ordre', 0)} for i in st.session_state.apps_data]
-    
     if clean_data:
         df_apps = pd.DataFrame(clean_data)
     else:
         df_apps = pd.DataFrame(columns=["Nom", "Ordre"])
     
-    edited_apps = st.data_editor(
-        df_apps, 
-        num_rows="dynamic", 
-        use_container_width=True, 
-        hide_index=True, 
-        column_config={
-            "Nom": st.column_config.TextColumn("Nom", required=True), 
-            "Ordre": st.column_config.NumberColumn("Ordre", min_value=0, step=1, format="%d")
-        }, 
-        key="ed_apps"
-    )
+    edited_apps = st.data_editor(df_apps, num_rows="dynamic", use_container_width=True, hide_index=True, 
+                                 column_config={
+                                     "Nom": st.column_config.TextColumn("Nom", required=True), 
+                                     "Ordre": st.column_config.NumberColumn("Ordre", min_value=0, step=1, format="%d")
+                                 }, key="ed_apps")
+                                 
+    if st.button("💾 Sauvegarder et Trier"):
+        save_apps_db(edited_apps.sort_values(by="Ordre"))
+        if "data_loaded" in st.session_state: del st.session_state.data_loaded
+        st.success("Applications mises à jour !"); time.sleep(1); st.rerun()
 
 # --- PAGE EVENTS ---
 elif st.session_state.page == "events":
@@ -165,21 +163,38 @@ elif st.session_state.page == "events":
     if not st.session_state.apps:
         st.warning("Créez des applications d'abord.")
     else:
-        df_evts = pd.DataFrame(st.session_state.events if st.session_state.events else columns=["app", "env", "type", "d1", "d2", "comment"])
-        if not df_evts.empty:
-            df_evts["d1"], df_evts["d2"] = pd.to_datetime(df_evts["d1"]).dt.date, pd.to_datetime(df_evts["d2"]).dt.date
+        # Correction de la syntaxe DataFrame vide
+        if st.session_state.events:
+            df_evts = pd.DataFrame(st.session_state.events)
+            if not df_evts.empty:
+                df_evts["d1"] = pd.to_datetime(df_evts["d1"]).dt.date
+                df_evts["d2"] = pd.to_datetime(df_evts["d2"]).dt.date
+        else:
+            df_evts = pd.DataFrame(columns=["app", "env", "type", "d1", "d2", "comment"])
 
         edited_evts = st.data_editor(df_evts, num_rows="dynamic", use_container_width=True, hide_index=True,
-                                     column_config={"app": st.column_config.SelectboxColumn("App", options=st.session_state.apps, required=True),
-                                                    "env": st.column_config.SelectboxColumn("Env", options=["PROD", "PRÉPROD", "RECETTE"], required=True),
-                                                    "type": st.column_config.SelectboxColumn("Type", options=["MEP", "INCIDENT", "MAINTENANCE", "TEST", "MORATOIRE"], required=True),
-                                                    "d1": st.column_config.DateColumn("Début", required=True),
-                                                    "d2": st.column_config.DateColumn("Fin", required=True)}, key="ed_evts")
+                                     column_config={
+                                         "app": st.column_config.SelectboxColumn("App", options=st.session_state.apps, required=True),
+                                         "env": st.column_config.SelectboxColumn("Env", options=["PROD", "PRÉPROD", "RECETTE"], required=True),
+                                         "type": st.column_config.SelectboxColumn("Type", options=["MEP", "INCIDENT", "MAINTENANCE", "TEST", "MORATOIRE"], required=True),
+                                         "d1": st.column_config.DateColumn("Début", required=True),
+                                         "d2": st.column_config.DateColumn("Fin", required=True),
+                                         "comment": st.column_config.TextColumn("Commentaire")
+                                     }, key="ed_evts")
+                                     
         if st.button("💾 Sauvegarder (Cloud)"):
             cleaned = []
             for _, r in edited_evts.iterrows():
-                if r["app"] and pd.notnull(r["d1"]):
-                    cleaned.append({"app": r["app"], "env": r["env"], "type": r["type"], "d1": r["d1"], "d2": r["d2"], "comment": r["comment"]})
+                # Vérification que les colonnes obligatoires ne sont pas vides
+                if pd.notnull(r["app"]) and pd.notnull(r["d1"]):
+                    cleaned.append({
+                        "app": r["app"], 
+                        "env": r["env"], 
+                        "type": r["type"], 
+                        "d1": r["d1"], 
+                        "d2": r["d2"], 
+                        "comment": r["comment"]
+                    })
             save_events_db(cleaned)
             st.session_state.events = cleaned
             st.success("Événements sauvegardés !"); time.sleep(1); st.rerun()
@@ -219,4 +234,3 @@ elif st.session_state.page == "planning":
                     html += f'<td class="{" ".join(cls)}">{cnt}{ttp}</td>'
                 html += '</tr>'
             st.markdown(html + '</tbody></table></div>', unsafe_allow_html=True)
-
