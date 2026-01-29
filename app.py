@@ -100,7 +100,9 @@ for i, tab in enumerate(tabs):
         for d in dates:
             cf[str(d.day)] = st.column_config.TextColumn(str(d.day), width=35)
 
-        # --- TABLEAU INTERACTIF ---
+        # --- C'EST ICI QUE JE FORCE L'IDENTIFIANT UNIQUE ---
+        unique_key = f"planning_table_{month}_{env_selected}"
+        
         response = st.dataframe(
             df.style.map(style_val),
             use_container_width=True,
@@ -108,7 +110,7 @@ for i, tab in enumerate(tabs):
             column_config=cf,
             on_select="rerun",
             selection_mode=["single-row", "single-column"],
-            key=f"grid_{i}"  # <--- C'EST ICI LA CORRECTION (ID UNIQUE)
+            key=unique_key  # <--- INDISPENSABLE
         )
         
         # --- INTERACTION ---
