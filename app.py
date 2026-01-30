@@ -5,12 +5,13 @@ from datetime import date, datetime
 from supabase import create_client, Client
 import time
 import holidays
-# Indicateur visuel d'environnement
-is_dev = "dev" in st.secrets["supabase"]["url"].lower()
+# Indicateur d'environnement
+# On utilise .get() pour éviter que l'app plante si la clé n'existe pas encore
+env_type = st.secrets["supabase"].get("env", "PRODUCTION")
 
-if is_dev:
+if env_type == "DEVELOPPEMENT":
     st.sidebar.warning("⚠️ MODE DÉVELOPPEMENT")
-    st.sidebar.caption("Connecté à : Planning-IT-DEV")
+    st.sidebar.caption("Base : Planning-IT-DEV")
 # ==================================================
 # 1. CONFIGURATION & CONNEXION DB
 # ==================================================
@@ -474,4 +475,5 @@ elif st.session_state.page == "planning":
             
             html += '</tbody></table></div>'
             st.markdown(html, unsafe_allow_html=True)
+
 
