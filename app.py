@@ -794,11 +794,13 @@ elif st.session_state.page == "planning":
     # Filtre par projet (uniquement pour RECETTE)
     projet_filter = None
     if env_sel == "RECETTE" and st.session_state.projets:
-        projet_options = ["📋 Afficher tout"] + st.session_state.projets
+        projet_options = ["📋 Afficher tout", "📋 Afficher tout (hors projet)"] + st.session_state.projets
         projet_filter = st.selectbox("📁 Filtrer par projet :", projet_options, key="planning_projet_filter")
         
         if projet_filter == "📋 Afficher tout":
-            st.caption("ℹ️ Affichage des événements sans projet associé")
+            st.caption("ℹ️ Affichage de tous les événements")
+        elif projet_filter == "📋 Afficher tout (hors projet)":
+            st.caption("ℹ️ Affichage uniquement des événements sans projet associé")
         else:
             st.caption(f"ℹ️ Affichage du projet **{projet_filter}** + événements sans projet")
     
@@ -836,6 +838,9 @@ elif st.session_state.page == "planning":
         has_no_projet = ev_projet is None or ev_projet == "" or pd.isna(ev_projet)
         
         if projet_filter == "📋 Afficher tout":
+            # Afficher TOUS les événements (avec ou sans projet)
+            return True
+        elif projet_filter == "📋 Afficher tout (hors projet)":
             # Afficher uniquement les événements SANS projet
             return has_no_projet
         else:
