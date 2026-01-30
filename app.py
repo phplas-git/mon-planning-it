@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 import calendar
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from supabase import create_client, Client
 import time
 import holidays
@@ -419,12 +419,13 @@ document.addEventListener('DOMContentLoaded', function() {
 with st.sidebar:
     st.title("📌 Menu")
     if st.button("📅 Planning", use_container_width=True): st.session_state.page = "planning"; st.rerun()
+    if st.button("📊 Dashboard", use_container_width=True): st.session_state.page = "dashboard"; st.rerun()
     if st.button("📝 Événements", use_container_width=True): st.session_state.page = "events"; st.rerun()
     if st.button("📱 Applications", use_container_width=True): st.session_state.page = "apps"; st.rerun()
     if st.button("📁 Projets", use_container_width=True): st.session_state.page = "projets"; st.rerun()
     st.divider()
-    years_list = [2025, 2026, 2027, 2028]
-    sel_year = st.selectbox("Année", years_list, index=years_list.index(TODAY.year) if TODAY.year in years_list else 1)
+    years_list = [2026, 2027, 2028, 2029, 2030]
+    sel_year = st.selectbox("Année", years_list, index=years_list.index(TODAY.year) if TODAY.year in years_list else 0)
     st.divider()
     
     # FORMULAIRE D'AJOUT RAPIDE (uniquement sur la page planning)
@@ -471,6 +472,12 @@ with st.sidebar:
                 with st.spinner("Ajout en cours..."):
                     st.session_state.events.append(new_event)
                     save_events_db(st.session_state.events)
+                    
+                    # Mémoriser l'environnement et le mois pour la navigation après rerun
+                    st.session_state.nav_to_env = q_env
+                    st.session_state.nav_to_month = q_d1.month - 1  # Index 0-based pour les tabs
+                    st.session_state.nav_to_year = q_d1.year
+                    
                     st.success("✅ Événement ajouté !")
                     time.sleep(0.5)
                     del st.session_state.data_loaded
@@ -788,8 +795,19 @@ elif st.session_state.page == "events":
 elif st.session_state.page == "planning":
     st.title(f"📅 Planning Visuel {sel_year}")
     
+    # Récupérer l'environnement de navigation (après ajout d'événement)
+    default_env_index = 0  # PROD par défaut
+    if "nav_to_env" in st.session_state:
+        env_list = ["PROD", "PRÉPROD", "RECETTE"]
+        if st.session_state.nav_to_env in env_list:
+            default_env_index = env_list.index(st.session_state.nav_to_env)
+    
     # Sélection de l'environnement
-    env_sel = st.radio("Secteur :", ["PROD", "PRÉPROD", "RECETTE"], horizontal=True)
+    env_sel = st.radio("Secteur :", ["PROD", "PRÉPROD", "RECETTE"], horizontal=True, index=default_env_index, key="env_radio")
+    
+    # Nettoyer la navigation après utilisation
+    if "nav_to_env" in st.session_state:
+        del st.session_state.nav_to_env
     
     # Filtre par projet (uniquement pour RECETTE)
     projet_filter = None
@@ -805,6 +823,15 @@ elif st.session_state.page == "planning":
             st.caption(f"ℹ️ Affichage du projet **{projet_filter}** + événements sans projet")
     
     fr_holidays = holidays.France(years=sel_year)
+    
+    # Récupérer le mois de navigation (après ajout d'événement)
+    default_tab = None
+    if "nav_to_month" in st.session_state:
+        default_tab = MONTHS_FR[st.session_state.nav_to_month]
+        del st.session_state.nav_to_month
+    if "nav_to_year" in st.session_state:
+        del st.session_state.nav_to_year
+    
     tabs = st.tabs(MONTHS_FR)
 
     # Fonction helper pour obtenir la classe CSS d'un type d'événement
@@ -949,3 +976,237 @@ elif st.session_state.page == "planning":
             
             html += '</tbody></table></div>'
             st.markdown(html, unsafe_allow_html=True)
+
+elif st.session_state.page == "dashboard":
+    st.title("📊 Dashboard Disponibilité - Environnement RECETTE")
+    
+    if not st.session_state.apps:
+        st.warning("⚠️ Aucune application enregistrée.")
+    else:
+        # Sélection de la période
+        col_period1, col_period2 = st.columns([1, 1])
+        
+        with col_period1:
+            years_list = [2026, 2027, 2028, 2029, 2030]
+            dash_year = st.selectbox("📅 Année", years_list, index=years_list.index(TODAY.year) if TODAY.year in years_list else 0, key="dash_year")
+        
+        with col_period2:
+            period_options = ["Année complète"] + MONTHS_FR
+            dash_period = st.selectbox("📆 Période", period_options, key="dash_period")
+        
+        st.divider()
+        
+        # Charger les jours fériés
+        fr_holidays = holidays.France(years=dash_year)
+        
+        # Fonction pour calculer les jours ouvrés d'une période
+        def get_working_days(year, month=None):
+            """Retourne la liste des jours ouvrés (lun-ven, hors fériés)"""
+            working_days = []
+            if month:
+                # Un mois spécifique
+                days_in_month = calendar.monthrange(year, month)[1]
+                for day in range(1, days_in_month + 1):
+                    d = date(year, month, day)
+                    if d.weekday() < 5 and d not in fr_holidays:  # Lun-Ven et pas férié
+                        working_days.append(d)
+            else:
+                # Année complète
+                for m in range(1, 13):
+                    days_in_month = calendar.monthrange(year, m)[1]
+                    for day in range(1, days_in_month + 1):
+                        d = date(year, m, day)
+                        if d.weekday() < 5 and d not in fr_holidays:
+                            working_days.append(d)
+            return working_days
+        
+        # Fonction pour vérifier si un événement doit être pris en compte
+        def should_count_event(ev):
+            # Environnement RECETTE uniquement
+            if ev.get("env") != "RECETTE":
+                return False
+            
+            # Type MAINTENANCE ou INCIDENT uniquement
+            ev_type = str(ev.get("type", "")).upper()
+            if "MAI" not in ev_type and "INC" not in ev_type:
+                return False
+            
+            return True
+        
+        # Déterminer la période
+        if dash_period == "Année complète":
+            working_days = get_working_days(dash_year)
+            period_label = f"Année {dash_year}"
+        else:
+            month_idx = MONTHS_FR.index(dash_period) + 1
+            working_days = get_working_days(dash_year, month_idx)
+            period_label = f"{dash_period} {dash_year}"
+        
+        total_working_days = len(working_days)
+        
+        if total_working_days == 0:
+            st.warning("⚠️ Aucun jour ouvré sur cette période.")
+        else:
+            # Calculer la disponibilité par application
+            results = []
+            
+            for app_name in st.session_state.apps:
+                # Trouver les jours avec incident ou maintenance pour cette app
+                unavailable_days = set()
+                
+                for ev in st.session_state.events:
+                    if ev.get("app") == app_name and should_count_event(ev):
+                        # Parcourir tous les jours de l'événement
+                        current = ev["d1"]
+                        while current <= ev["d2"]:
+                            if current in working_days:
+                                unavailable_days.add(current)
+                            current += timedelta(days=1)
+                
+                nb_unavailable = len(unavailable_days)
+                nb_available = total_working_days - nb_unavailable
+                availability = (nb_available / total_working_days) * 100 if total_working_days > 0 else 100
+                
+                results.append({
+                    "app": app_name,
+                    "total": total_working_days,
+                    "unavailable": nb_unavailable,
+                    "available": nb_available,
+                    "availability": availability
+                })
+            
+            # Calculer la moyenne globale
+            avg_availability = sum(r["availability"] for r in results) / len(results) if results else 0
+            
+            # Affichage des métriques globales
+            st.markdown(f"### 📈 Disponibilité globale - {period_label}")
+            
+            col_m1, col_m2, col_m3, col_m4 = st.columns(4)
+            
+            with col_m1:
+                color = "🟢" if avg_availability >= 95 else "🟡" if avg_availability >= 80 else "🔴"
+                st.metric("Disponibilité moyenne", f"{avg_availability:.1f}%", delta=None)
+                st.caption(f"{color} {'Excellent' if avg_availability >= 95 else 'Correct' if avg_availability >= 80 else 'Critique'}")
+            
+            with col_m2:
+                st.metric("Jours ouvrés", f"{total_working_days}")
+                st.caption("Lun-Ven hors fériés")
+            
+            with col_m3:
+                total_incidents = sum(r["unavailable"] for r in results)
+                st.metric("Total jours impactés", f"{total_incidents}")
+                st.caption("Maintenance + Incident")
+            
+            with col_m4:
+                nb_apps_ok = len([r for r in results if r["availability"] >= 95])
+                st.metric("Apps ≥ 95%", f"{nb_apps_ok}/{len(results)}")
+                st.caption("Objectif atteint")
+            
+            st.divider()
+            
+            # Tableau détaillé par application
+            st.markdown("### 📋 Détail par application")
+            
+            # En-têtes du tableau
+            header_col1, header_col2, header_col3, header_col4, header_col5, header_col6 = st.columns([2, 1, 1, 1, 4, 1])
+            with header_col1:
+                st.markdown("**Application**")
+            with header_col2:
+                st.markdown("<div style='text-align:center'><strong>Jours ouvrés</strong></div>", unsafe_allow_html=True)
+            with header_col3:
+                st.markdown("<div style='text-align:center'><strong>Indispo.</strong></div>", unsafe_allow_html=True)
+            with header_col4:
+                st.markdown("<div style='text-align:center'><strong>Dispo.</strong></div>", unsafe_allow_html=True)
+            with header_col5:
+                st.markdown("**Disponibilité**")
+            with header_col6:
+                st.markdown("<div style='text-align:center'><strong>Statut</strong></div>", unsafe_allow_html=True)
+            
+            st.divider()
+            
+            # Trier par disponibilité (du plus bas au plus haut pour mettre en évidence les problèmes)
+            results_sorted = sorted(results, key=lambda x: x["availability"])
+            
+            # Utiliser des colonnes Streamlit pour chaque application
+            for r in results_sorted:
+                avail = r["availability"]
+                
+                # Déterminer la couleur et le statut
+                if avail >= 95:
+                    color = "#22c55e"
+                    status = "✓ OK"
+                    status_bg = "#dcfce7"
+                    status_color = "#166534"
+                elif avail >= 80:
+                    color = "#eab308"
+                    status = "⚠ Moyen"
+                    status_bg = "#fef9c3"
+                    status_color = "#854d0e"
+                else:
+                    color = "#ef4444"
+                    status = "✗ Critique"
+                    status_bg = "#fee2e2"
+                    status_color = "#991b1b"
+                
+                # Ligne pour chaque application
+                col1, col2, col3, col4, col5, col6 = st.columns([2, 1, 1, 1, 4, 1])
+                
+                with col1:
+                    st.markdown(f"**{r['app']}**")
+                with col2:
+                    st.markdown(f"<div style='text-align:center'>{r['total']}</div>", unsafe_allow_html=True)
+                with col3:
+                    st.markdown(f"<div style='text-align:center; color:#dc2626;'>{r['unavailable']}</div>", unsafe_allow_html=True)
+                with col4:
+                    st.markdown(f"<div style='text-align:center; color:#16a34a;'>{r['available']}</div>", unsafe_allow_html=True)
+                with col5:
+                    st.progress(avail / 100)
+                    st.caption(f"{avail:.1f}%")
+                with col6:
+                    st.markdown(f"<div style='text-align:center; background-color:{status_bg}; color:{status_color}; padding:4px 8px; border-radius:4px; font-size:12px; font-weight:bold;'>{status}</div>", unsafe_allow_html=True)
+            
+            # En-têtes (affichés une seule fois au-dessus)
+            st.markdown("")
+            
+            # Légende
+            col_leg1, col_leg2, col_leg3 = st.columns(3)
+            with col_leg1:
+                st.markdown("🟢 **≥ 95%** : Objectif atteint")
+            with col_leg2:
+                st.markdown("🟡 **80-95%** : À surveiller")
+            with col_leg3:
+                st.markdown("🔴 **< 80%** : Critique")
+            
+            # Section détails des incidents/maintenances
+            st.divider()
+            st.markdown("### 🔍 Détail des événements impactants")
+            
+            # Filtrer les événements de la période
+            events_in_period = []
+            for ev in st.session_state.events:
+                if should_count_event(ev):
+                    # Vérifier si l'événement chevauche la période
+                    if dash_period == "Année complète":
+                        if ev["d1"].year == dash_year or ev["d2"].year == dash_year:
+                            events_in_period.append(ev)
+                    else:
+                        month_idx = MONTHS_FR.index(dash_period) + 1
+                        ev_start_month = ev["d1"].month if ev["d1"].year == dash_year else 0
+                        ev_end_month = ev["d2"].month if ev["d2"].year == dash_year else 13
+                        if ev_start_month <= month_idx <= ev_end_month or ev_end_month >= month_idx >= ev_start_month:
+                            events_in_period.append(ev)
+            
+            if events_in_period:
+                # Créer un DataFrame pour affichage
+                df_events = pd.DataFrame([{
+                    "Application": ev["app"],
+                    "Type": ev["type"],
+                    "Début": ev["d1"].strftime("%d/%m/%Y"),
+                    "Fin": ev["d2"].strftime("%d/%m/%Y"),
+                    "Durée": f"{(ev['d2'] - ev['d1']).days + 1} jour(s)",
+                    "Commentaire": ev.get("comment", "-")[:50] + "..." if len(str(ev.get("comment", ""))) > 50 else ev.get("comment", "-")
+                } for ev in sorted(events_in_period, key=lambda x: x["d1"])])
+                
+                st.dataframe(df_events, use_container_width=True, hide_index=True)
+            else:
+                st.success("✅ Aucun incident ou maintenance sur cette période !")
