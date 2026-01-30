@@ -5,13 +5,7 @@ from datetime import date, datetime
 from supabase import create_client, Client
 import time
 import holidays
-# Indicateur d'environnement
-# On utilise .get() pour éviter que l'app plante si la clé n'existe pas encore
-env_type = st.secrets["supabase"].get("env", "PRODUCTION")
 
-if env_type == "DEVELOPPEMENT":
-    st.sidebar.warning("⚠️ MODE DÉVELOPPEMENT")
-    st.sidebar.caption("Base : Planning-IT-DEV")
 # ==================================================
 # 1. CONFIGURATION & CONNEXION DB
 # ==================================================
@@ -25,8 +19,16 @@ st.set_page_config(
         'About': None
     }
 )
+# ==================================================
+# Indicateur d'environnement
+# On utilise .get() pour éviter que l'app plante si la clé n'existe pas encore
+env_type = st.secrets["supabase"].get("env", "PRODUCTION")
 
+if env_type == "DEVELOPPEMENT":
+    st.sidebar.warning("⚠️ MODE DÉVELOPPEMENT")
+    st.sidebar.caption("Base : Planning-IT-DEV")
 @st.cache_resource
+# ==================================================
 def init_connection():
     try:
         url = st.secrets["supabase"]["url"]
@@ -475,5 +477,6 @@ elif st.session_state.page == "planning":
             
             html += '</tbody></table></div>'
             st.markdown(html, unsafe_allow_html=True)
+
 
 
