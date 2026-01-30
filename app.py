@@ -54,7 +54,7 @@ def load_data():
         projets_full = res_projets.data
         projets_names = [row['projet'] for row in projets_full]
         
-        # Charger les événements
+        # Charger les événements (avec leur id)
         res_evts = supabase.table("evenements").select("*").execute()
         evts_data = res_evts.data
         for ev in evts_data:
@@ -85,6 +85,79 @@ def save_projets_db(projet_list):
             if data: supabase.table("projets").insert(data).execute()
     except Exception as e: st.error(f"Erreur Projets : {e}")
 
+# ============================================
+# FONCTIONS CRUD OPTIMISÉES POUR ÉVÉNEMENTS
+# ============================================
+
+def add_event_db(event):
+    """Ajoute un seul événement et retourne l'événement avec son id"""
+    if not supabase: return None
+    try:
+        data = {
+            "app": event['app'], 
+            "env": event['env'], 
+            "type": event['type'],
+            "d1": pd.to_datetime(event['d1']).strftime('%Y-%m-%d'),
+            "d2": pd.to_datetime(event['d2']).strftime('%Y-%m-%d'),
+            "h1": event.get('h1', '00:00'), 
+            "h2": event.get('h2', '23:59'),
+            "comment": str(event.get('comment', '')),
+            "projet": event.get('projet') if event.get('projet') else None
+        }
+        result = supabase.table("evenements").insert(data).execute()
+        if result.data:
+            new_event = result.data[0]
+            new_event['d1'] = pd.to_datetime(new_event['d1']).date()
+            new_event['d2'] = pd.to_datetime(new_event['d2']).date()
+            return new_event
+        return None
+    except Exception as e: 
+        st.error(f"Erreur ajout événement : {e}")
+        return None
+
+def update_event_db(event_id, event):
+    """Met à jour un événement existant par son id"""
+    if not supabase: return False
+    try:
+        data = {
+            "app": event['app'], 
+            "env": event['env'], 
+            "type": event['type'],
+            "d1": pd.to_datetime(event['d1']).strftime('%Y-%m-%d'),
+            "d2": pd.to_datetime(event['d2']).strftime('%Y-%m-%d'),
+            "h1": event.get('h1', '00:00'), 
+            "h2": event.get('h2', '23:59'),
+            "comment": str(event.get('comment', '')),
+            "projet": event.get('projet') if event.get('projet') else None
+        }
+        supabase.table("evenements").update(data).eq("id", event_id).execute()
+        return True
+    except Exception as e: 
+        st.error(f"Erreur modification événement : {e}")
+        return False
+
+def delete_event_db(event_id):
+    """Supprime un événement par son id"""
+    if not supabase: return False
+    try:
+        supabase.table("evenements").delete().eq("id", event_id).execute()
+        return True
+    except Exception as e: 
+        st.error(f"Erreur suppression événement : {e}")
+        return False
+
+def delete_events_db(event_ids):
+    """Supprime plusieurs événements par leurs ids"""
+    if not supabase or not event_ids: return False
+    try:
+        for event_id in event_ids:
+            supabase.table("evenements").delete().eq("id", event_id).execute()
+        return True
+    except Exception as e: 
+        st.error(f"Erreur suppression événements : {e}")
+        return False
+
+# Ancienne fonction conservée pour compatibilité (mais ne devrait plus être utilisée)
 def save_events_db(event_list):
     if not supabase: return
     try:
@@ -470,18 +543,21 @@ with st.sidebar:
                     "projet": q_projet if q_projet != "(Aucun)" else None
                 }
                 with st.spinner("Ajout en cours..."):
-                    st.session_state.events.append(new_event)
-                    save_events_db(st.session_state.events)
-                    
-                    # Mémoriser l'environnement et le mois pour la navigation après rerun
-                    st.session_state.nav_to_env = q_env
-                    st.session_state.nav_to_month = q_d1.month - 1  # Index 0-based pour les tabs
-                    st.session_state.nav_to_year = q_d1.year
-                    
-                    st.success("✅ Événement ajouté !")
-                    time.sleep(0.5)
-                    del st.session_state.data_loaded
-                    st.rerun()
+                    # Utiliser la nouvelle fonction optimisée
+                    added_event = add_event_db(new_event)
+                    if added_event:
+                        st.session_state.events.append(added_event)
+                        
+                        # Mémoriser l'environnement et le mois pour la navigation après rerun
+                        st.session_state.nav_to_env = q_env
+                        st.session_state.nav_to_month = q_d1.month - 1  # Index 0-based pour les tabs
+                        st.session_state.nav_to_year = q_d1.year
+                        
+                        st.success("✅ Événement ajouté !")
+                        time.sleep(0.5)
+                        st.rerun()
+                    else:
+                        st.error("❌ Erreur lors de l'ajout")
         
         st.divider()
     
@@ -625,17 +701,23 @@ elif st.session_state.page == "events":
         
         st.divider()
         
-        # Préparation des données
-        df_evts = pd.DataFrame(st.session_state.events if st.session_state.events else None)
-        cols = ["app", "env", "type", "projet", "d1", "d2", "h1", "h2", "comment"]
+        # Préparation des données avec les IDs
+        events_with_ids = st.session_state.events if st.session_state.events else []
         
-        if not df_evts.empty:
-            # S'assurer que la colonne projet existe
-            if 'projet' not in df_evts.columns:
-                df_evts['projet'] = None
-            display_df = df_evts[cols].copy()
+        # Créer un DataFrame avec l'id inclus
+        if events_with_ids:
+            df_evts = pd.DataFrame(events_with_ids)
+            cols_with_id = ["id", "app", "env", "type", "projet", "d1", "d2", "h1", "h2", "comment"]
+            # S'assurer que toutes les colonnes existent
+            for col in cols_with_id:
+                if col not in df_evts.columns:
+                    df_evts[col] = None
+            display_df = df_evts[cols_with_id].copy()
         else:
-            display_df = pd.DataFrame(columns=cols)
+            display_df = pd.DataFrame(columns=["id", "app", "env", "type", "projet", "d1", "d2", "h1", "h2", "comment"])
+        
+        # Sauvegarder les IDs originaux avant filtrage
+        original_ids = set(display_df['id'].dropna().tolist())
         
         # Appliquer les filtres pour l'affichage
         filtered_df = display_df.copy()
@@ -650,16 +732,20 @@ elif st.session_state.page == "events":
         elif filter_projet != "Tous":
             filtered_df = filtered_df[filtered_df['projet'] == filter_projet]
         
+        # Sauvegarder les IDs filtrés pour détecter les suppressions
+        filtered_ids_before = set(filtered_df['id'].dropna().tolist())
+        
         # Options pour le selectbox projet (avec option vide)
         projet_options_edit = [""] + st.session_state.projets
         
-        # Data editor avec configuration améliorée
+        # Data editor avec configuration améliorée (id caché)
         edited_evts = st.data_editor(
             filtered_df, 
             num_rows="dynamic", 
             use_container_width=True, 
             hide_index=True,
             column_config={
+                "id": st.column_config.NumberColumn("ID", disabled=True, width="small"),
                 "app": st.column_config.SelectboxColumn("App", options=st.session_state.apps, help="Application concernée", required=True),
                 "env": st.column_config.SelectboxColumn("Env", options=["PROD", "PRÉPROD", "RECETTE"], help="Environnement", required=True),
                 "type": st.column_config.SelectboxColumn("Type", options=["MEP", "INCIDENT", "MAINTENANCE", "TEST", "TNR", "MORATOIRE"], help="Type d'événement", required=True),
@@ -689,13 +775,14 @@ elif st.session_state.page == "events":
             cancel_btn = st.button("↩️ Annuler", use_container_width=True)
         
         if save_btn:
-            # IMPORTANT: Si des filtres sont actifs, on doit fusionner avec les événements non filtrés
-            if filter_app != "Toutes" or filter_env != "Tous" or filter_type != "Tous" or filter_projet != "Tous":
-                st.warning("⚠️ Des filtres sont actifs. La sauvegarde ne modifiera que les événements affichés. Les autres événements seront conservés.")
-            
-            # Validation
-            cleaned = []
+            # Analyser les changements
             errors = []
+            to_add = []
+            to_update = []
+            to_delete = []
+            
+            # IDs présents après édition
+            edited_ids = set()
             
             for idx, r in edited_evts.iterrows():
                 # Vérifier que les champs obligatoires sont remplis
@@ -726,7 +813,6 @@ elif st.session_state.page == "events":
                     h1 = str(r.get("h1", "00:00")).strip() if pd.notnull(r.get("h1")) else "00:00"
                     h2 = str(r.get("h2", "23:59")).strip() if pd.notnull(r.get("h2")) else "23:59"
                     
-                    # Vérification format HH:MM basique
                     if not (len(h1) == 5 and h1[2] == ":"):
                         errors.append(f"⚠️ Ligne {ligne}: Format heure début invalide (attendu HH:MM)")
                         continue
@@ -734,11 +820,8 @@ elif st.session_state.page == "events":
                         errors.append(f"⚠️ Ligne {ligne}: Format heure fin invalide (attendu HH:MM)")
                         continue
                     
-                    # Commentaire et projet
-                    comment = str(r.get("comment", "")).strip()
-                    projet = r.get("projet") if pd.notnull(r.get("projet")) and r.get("projet") != "" else None
-                    
-                    cleaned.append({
+                    # Préparer l'événement
+                    event_data = {
                         "app": r["app"],
                         "env": r["env"],
                         "type": r["type"],
@@ -746,9 +829,22 @@ elif st.session_state.page == "events":
                         "d2": d2,
                         "h1": h1,
                         "h2": h2,
-                        "comment": comment,
-                        "projet": projet
-                    })
+                        "comment": str(r.get("comment", "")).strip(),
+                        "projet": r.get("projet") if pd.notnull(r.get("projet")) and r.get("projet") != "" else None
+                    }
+                    
+                    # Déterminer si c'est un ajout ou une modification
+                    event_id = r.get("id")
+                    if pd.notnull(event_id) and event_id in filtered_ids_before:
+                        # Événement existant -> UPDATE
+                        edited_ids.add(event_id)
+                        to_update.append({"id": int(event_id), "data": event_data})
+                    else:
+                        # Nouvel événement -> INSERT
+                        to_add.append(event_data)
+            
+            # Détecter les suppressions (IDs qui étaient dans filtered_ids_before mais plus dans edited_ids)
+            to_delete = list(filtered_ids_before - edited_ids)
             
             # Afficher les erreurs ou sauvegarder
             if errors:
@@ -756,37 +852,56 @@ elif st.session_state.page == "events":
                     st.error(err)
             else:
                 with st.spinner("Sauvegarde en cours..."):
-                    # Si des filtres sont actifs, fusionner avec les événements non affichés
-                    if filter_app != "Toutes" or filter_env != "Tous" or filter_type != "Tous" or filter_projet != "Tous":
-                        # Garder les événements qui ne correspondent pas aux filtres
-                        final_events = []
-                        for ev in st.session_state.events:
-                            keep = False
-                            if filter_app != "Toutes" and ev.get('app') != filter_app:
-                                keep = True
-                            elif filter_env != "Tous" and ev.get('env') != filter_env:
-                                keep = True
-                            elif filter_type != "Tous" and ev.get('type') != filter_type:
-                                keep = True
-                            elif filter_projet == "(Sans projet)" and ev.get('projet') and ev.get('projet') != "":
-                                keep = True
-                            elif filter_projet != "Tous" and filter_projet != "(Sans projet)" and ev.get('projet') != filter_projet:
-                                keep = True
-                            
-                            if keep:
-                                final_events.append(ev)
-                        
-                        # Ajouter les événements édités
-                        final_events.extend(cleaned)
-                        save_events_db(final_events)
-                        st.success(f"✅ Sauvegarde réussie ! ({len(cleaned)} événement(s) modifié(s), {len(final_events)} au total)")
-                    else:
-                        save_events_db(cleaned)
-                        st.success(f"✅ {len(cleaned)} événement(s) sauvegardé(s) avec succès !")
+                    success = True
+                    added_count = 0
+                    updated_count = 0
+                    deleted_count = 0
                     
-                    time.sleep(1)
-                    del st.session_state.data_loaded
-                    st.rerun()
+                    # Supprimer les événements
+                    if to_delete:
+                        if delete_events_db(to_delete):
+                            deleted_count = len(to_delete)
+                            # Mettre à jour le session_state
+                            st.session_state.events = [ev for ev in st.session_state.events if ev.get('id') not in to_delete]
+                        else:
+                            success = False
+                    
+                    # Ajouter les nouveaux événements
+                    for event_data in to_add:
+                        added_event = add_event_db(event_data)
+                        if added_event:
+                            st.session_state.events.append(added_event)
+                            added_count += 1
+                        else:
+                            success = False
+                    
+                    # Mettre à jour les événements existants
+                    for update_info in to_update:
+                        if update_event_db(update_info["id"], update_info["data"]):
+                            # Mettre à jour le session_state
+                            for i, ev in enumerate(st.session_state.events):
+                                if ev.get('id') == update_info["id"]:
+                                    st.session_state.events[i].update(update_info["data"])
+                                    break
+                            updated_count += 1
+                        else:
+                            success = False
+                    
+                    if success:
+                        summary = []
+                        if added_count: summary.append(f"{added_count} ajouté(s)")
+                        if updated_count: summary.append(f"{updated_count} modifié(s)")
+                        if deleted_count: summary.append(f"{deleted_count} supprimé(s)")
+                        
+                        if summary:
+                            st.success(f"✅ Sauvegarde réussie ! ({', '.join(summary)})")
+                        else:
+                            st.info("ℹ️ Aucune modification détectée")
+                        
+                        time.sleep(1)
+                        st.rerun()
+                    else:
+                        st.error("❌ Des erreurs se sont produites lors de la sauvegarde")
         
         if cancel_btn:
             del st.session_state.data_loaded
