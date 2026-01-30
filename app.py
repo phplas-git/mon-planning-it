@@ -221,12 +221,32 @@ st.markdown("""
         z-index: 5; 
         cursor: pointer; 
     }
-    .mep { background-color: #0070C0; } 
-    .inc { background-color: #FF0000; } 
-    .mai { background-color: #FFC000; color: black; } 
-    .test { background-color: #00B050; } 
-    .tnr { background-color: #70AD47; }
-    .mor { background-color: #9600C8; }
+    
+    /* Événements multiples - bandes horizontales */
+    .multi-event {
+        display: flex;
+        flex-direction: column;
+        width: 100%;
+        height: 100%;
+        cursor: pointer;
+    }
+    .multi-event .event-band {
+        flex: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-weight: bold;
+        font-size: 9px;
+        line-height: 1;
+    }
+    
+    .mep, .bg-mep { background-color: #0070C0; } 
+    .inc, .bg-inc { background-color: #FF0000; } 
+    .mai, .bg-mai { background-color: #FFC000; color: black; } 
+    .test, .bg-test { background-color: #00B050; } 
+    .tnr, .bg-tnr { background-color: #70AD47; }
+    .mor, .bg-mor { background-color: #9600C8; }
     
     /* TOOLTIP */
     .has-tooltip { position: relative; }
@@ -252,56 +272,126 @@ st.markdown("""
         background: #94a3b8;
     }
     
-    /* Tooltip simple avec CSS pur */
+    /* Tooltip avec position fixed pour sortir du conteneur */
     .has-tooltip { position: relative; }
     .has-tooltip .tooltip-box {
         visibility: hidden;
         opacity: 0;
-        width: 300px;
+        width: 320px;
+        max-height: 400px;
+        overflow-y: auto;
         background-color: #1e293b;
         color: #fff;
         border-radius: 6px;
         padding: 14px;
-        position: absolute;
-        z-index: 9999;
-        bottom: 100%;
-        left: 50%;
-        transform: translateX(-50%);
-        margin-bottom: 8px;
-        box-shadow: 0 10px 25px rgba(0,0,0,0.4);
+        position: fixed;
+        z-index: 99999;
+        box-shadow: 0 10px 25px rgba(0,0,0,0.5);
         font-size: 12px;
         text-align: left;
         line-height: 1.7;
         pointer-events: none;
-        transition: opacity 0.2s, visibility 0.2s;
+        transition: opacity 0.15s, visibility 0.15s;
     }
-    .has-tooltip .tooltip-box::after {
-        content: "";
-        position: absolute;
-        top: 100%;
-        left: 50%;
-        margin-left: -6px;
-        border-width: 6px;
-        border-style: solid;
-        border-color: #1e293b transparent transparent transparent;
+    
+    /* Scrollbar du tooltip */
+    .has-tooltip .tooltip-box::-webkit-scrollbar {
+        width: 6px;
     }
+    .has-tooltip .tooltip-box::-webkit-scrollbar-track {
+        background: #334155;
+        border-radius: 3px;
+    }
+    .has-tooltip .tooltip-box::-webkit-scrollbar-thumb {
+        background: #64748b;
+        border-radius: 3px;
+    }
+    
     .has-tooltip:hover .tooltip-box {
         visibility: visible;
         opacity: 1;
+        pointer-events: auto;
     }
-    /* Ajustement si le tooltip dépasse en haut */
-    tr:first-child .has-tooltip .tooltip-box {
-        bottom: auto;
-        top: 100%;
-        margin-top: 8px;
-        margin-bottom: 0;
+    
+    /* Séparateur entre événements dans le tooltip */
+    .tooltip-separator {
+        border-top: 1px solid #475569;
+        margin: 10px 0;
+        padding-top: 10px;
     }
-    tr:first-child .has-tooltip .tooltip-box::after {
-        top: auto;
-        bottom: 100%;
-        border-color: transparent transparent #1e293b transparent;
+    
+    /* Badge compteur d'événements */
+    .event-count {
+        position: absolute;
+        top: 2px;
+        right: 2px;
+        background-color: rgba(0,0,0,0.5);
+        color: white;
+        font-size: 8px;
+        font-weight: bold;
+        padding: 1px 4px;
+        border-radius: 3px;
     }
 </style>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Fonction pour positionner les tooltips
+    function setupTooltips() {
+        const cells = document.querySelectorAll('.has-tooltip');
+        
+        cells.forEach(cell => {
+            const tooltip = cell.querySelector('.tooltip-box');
+            if (!tooltip) return;
+            
+            cell.addEventListener('mouseenter', function(e) {
+                const rect = cell.getBoundingClientRect();
+                const tooltipRect = tooltip.getBoundingClientRect();
+                const viewportHeight = window.innerHeight;
+                const viewportWidth = window.innerWidth;
+                
+                // Position horizontale - centré sur la cellule
+                let left = rect.left + rect.width / 2 - 160; // 160 = moitié de 320px
+                
+                // Ajuster si dépasse à droite
+                if (left + 320 > viewportWidth - 10) {
+                    left = viewportWidth - 330;
+                }
+                // Ajuster si dépasse à gauche
+                if (left < 10) {
+                    left = 10;
+                }
+                
+                // Position verticale - au-dessus par défaut
+                let top = rect.top - tooltip.offsetHeight - 10;
+                
+                // Si pas assez de place en haut, mettre en bas
+                if (top < 10) {
+                    top = rect.bottom + 10;
+                }
+                
+                // Si toujours pas assez de place (en bas), centrer verticalement
+                if (top + tooltip.offsetHeight > viewportHeight - 10) {
+                    top = Math.max(10, (viewportHeight - tooltip.offsetHeight) / 2);
+                }
+                
+                tooltip.style.left = left + 'px';
+                tooltip.style.top = top + 'px';
+            });
+        });
+    }
+    
+    // Setup initial et après chaque changement Streamlit
+    setupTooltips();
+    
+    // Observer les changements du DOM pour les tabs Streamlit
+    const observer = new MutationObserver(function(mutations) {
+        setupTooltips();
+    });
+    
+    observer.observe(document.body, { childList: true, subtree: true });
+});
+</script>
 """, unsafe_allow_html=True)
 
 # ==================================================
@@ -371,51 +461,183 @@ with st.sidebar:
 
 if st.session_state.page == "apps":
     st.title("📱 Gestion des Applications")
+    
+    # Préparation des données
     clean_data = [{"Nom": i.get('nom', ''), "Ordre": i.get('ordre', 0)} for i in st.session_state.apps_data]
     df_apps = pd.DataFrame(clean_data if clean_data else None, columns=["Nom", "Ordre"])
-    edited_apps = st.data_editor(df_apps, num_rows="dynamic", use_container_width=True, hide_index=True, key="ed_apps")
     
-    col1, col2 = st.columns([1, 4])
+    # Data editor avec configuration
+    edited_apps = st.data_editor(
+        df_apps, 
+        num_rows="dynamic", 
+        use_container_width=True, 
+        hide_index=True, 
+        key="ed_apps",
+        column_config={
+            "Nom": st.column_config.TextColumn("Nom", help="Nom de l'application (majuscules)", max_chars=50, required=True),
+            "Ordre": st.column_config.NumberColumn("Ordre", help="Ordre d'affichage", min_value=0, max_value=999, step=1, required=True)
+        }
+    )
+    
+    # Afficher le nombre d'applications
+    nb_apps = len([row for _, row in edited_apps.iterrows() if row['Nom'] and str(row['Nom']).strip()])
+    st.caption(f"📊 {nb_apps} application(s)")
+    
+    col1, col2, col3 = st.columns([1, 1, 3])
     with col1:
         save_btn = st.button("💾 Sauvegarder", type="primary", use_container_width=True)
+    with col2:
+        cancel_btn = st.button("↩️ Annuler", use_container_width=True)
     
     if save_btn:
-        with st.spinner("Sauvegarde en cours..."):
-            save_apps_db(edited_apps.sort_values(by="Ordre"))
-            st.success("✅ Applications sauvegardées avec succès !")
-            time.sleep(1)
-            del st.session_state.data_loaded
-            st.rerun()
+        # Validation
+        valid_apps = []
+        errors = []
+        
+        for idx, row in edited_apps.iterrows():
+            nom = str(row['Nom']).strip() if pd.notnull(row['Nom']) else ""
+            
+            if nom:  # Seulement si le nom n'est pas vide
+                if pd.isnull(row['Ordre']):
+                    errors.append(f"⚠️ Ligne {idx+1}: L'ordre est obligatoire pour '{nom}'")
+                else:
+                    valid_apps.append({"Nom": nom.upper(), "Ordre": int(row['Ordre'])})
+        
+        if errors:
+            for err in errors:
+                st.error(err)
+        elif not valid_apps:
+            st.warning("⚠️ Aucune application à sauvegarder")
+        else:
+            # Vérifier les doublons
+            noms = [app['Nom'] for app in valid_apps]
+            if len(noms) != len(set(noms)):
+                st.error("⚠️ Il y a des noms d'applications en double")
+            else:
+                with st.spinner("Sauvegarde en cours..."):
+                    df_to_save = pd.DataFrame(valid_apps).sort_values(by="Ordre")
+                    save_apps_db(df_to_save)
+                    st.success(f"✅ {len(valid_apps)} application(s) sauvegardée(s) avec succès !")
+                    time.sleep(1)
+                    del st.session_state.data_loaded
+                    st.rerun()
+    
+    if cancel_btn:
+        del st.session_state.data_loaded
+        st.rerun()
 
 elif st.session_state.page == "events":
     st.title("📝 Gestion des Événements")
     if not st.session_state.apps: 
-        st.warning("Ajoutez des apps.")
+        st.warning("⚠️ Ajoutez d'abord des applications dans l'onglet 📱 Applications")
     else:
+        # Préparation des données
         df_evts = pd.DataFrame(st.session_state.events if st.session_state.events else None)
         cols = ["app", "env", "type", "d1", "d2", "h1", "h2", "comment"]
         display_df = df_evts[cols] if not df_evts.empty else pd.DataFrame(columns=cols)
-        edited_evts = st.data_editor(display_df, num_rows="dynamic", use_container_width=True, hide_index=True, 
-                                     column_config={"app": st.column_config.SelectboxColumn("App", options=st.session_state.apps),
-                                                    "env": st.column_config.SelectboxColumn("Env", options=["PROD", "PRÉPROD", "RECETTE"]),
-                                                    "type": st.column_config.SelectboxColumn("Type", options=["MEP", "INCIDENT", "MAINTENANCE", "TEST", "TNR", "MORATOIRE"])}, key="ed_evts")
         
-        col1, col2 = st.columns([1, 4])
+        # Data editor avec configuration améliorée
+        edited_evts = st.data_editor(
+            display_df, 
+            num_rows="dynamic", 
+            use_container_width=True, 
+            hide_index=True,
+            column_config={
+                "app": st.column_config.SelectboxColumn("App", options=st.session_state.apps, help="Application concernée", required=True),
+                "env": st.column_config.SelectboxColumn("Env", options=["PROD", "PRÉPROD", "RECETTE"], help="Environnement", required=True),
+                "type": st.column_config.SelectboxColumn("Type", options=["MEP", "INCIDENT", "MAINTENANCE", "TEST", "TNR", "MORATOIRE"], help="Type d'événement", required=True),
+                "d1": st.column_config.DateColumn("Date début", format="DD/MM/YYYY", help="Date de début", required=True),
+                "d2": st.column_config.DateColumn("Date fin", format="DD/MM/YYYY", help="Date de fin", required=True),
+                "h1": st.column_config.TextColumn("H. début", help="Heure début (HH:MM)", default="00:00", max_chars=5),
+                "h2": st.column_config.TextColumn("H. fin", help="Heure fin (HH:MM)", default="23:59", max_chars=5),
+                "comment": st.column_config.TextColumn("Commentaire", help="Détails de l'événement", max_chars=1000)
+            },
+            key="ed_evts"
+        )
+        
+        # Afficher le nombre d'événements
+        nb_events = len([r for _, r in edited_evts.iterrows() if pd.notnull(r.get("app")) and pd.notnull(r.get("d1"))])
+        st.caption(f"📊 {nb_events} événement(s)")
+        
+        col1, col2, col3 = st.columns([1, 1, 3])
         with col1:
             save_btn = st.button("💾 Sauvegarder", type="primary", use_container_width=True)
+        with col2:
+            cancel_btn = st.button("↩️ Annuler", use_container_width=True)
         
         if save_btn:
-            with st.spinner("Sauvegarde en cours..."):
-                cleaned = []
-                for _, r in edited_evts.iterrows():
-                    if pd.notnull(r["app"]) and pd.notnull(r["d1"]):
-                        d2 = r["d2"] if pd.notnull(r["d2"]) else r["d1"]
-                        cleaned.append({"app": r["app"], "env": r["env"], "type": r["type"], "d1": r["d1"], "d2": d2, "h1": r.get("h1","00:00"), "h2": r.get("h2","23:59"), "comment": str(r.get("comment",""))})
-                save_events_db(cleaned)
-                st.success("✅ Événements sauvegardés avec succès !")
-                time.sleep(1)
-                del st.session_state.data_loaded
-                st.rerun()
+            # Validation
+            cleaned = []
+            errors = []
+            
+            for idx, r in edited_evts.iterrows():
+                # Vérifier que les champs obligatoires sont remplis
+                if pd.notnull(r.get("app")):
+                    ligne = idx + 1
+                    
+                    # Validation des champs obligatoires
+                    if pd.isnull(r.get("env")):
+                        errors.append(f"⚠️ Ligne {ligne}: Environnement obligatoire")
+                        continue
+                    if pd.isnull(r.get("type")):
+                        errors.append(f"⚠️ Ligne {ligne}: Type obligatoire")
+                        continue
+                    if pd.isnull(r.get("d1")):
+                        errors.append(f"⚠️ Ligne {ligne}: Date début obligatoire")
+                        continue
+                    
+                    # Date de fin par défaut = date de début
+                    d1 = r["d1"]
+                    d2 = r["d2"] if pd.notnull(r.get("d2")) else d1
+                    
+                    # Validation cohérence des dates
+                    if d2 < d1:
+                        errors.append(f"⚠️ Ligne {ligne}: Date fin avant date début")
+                        continue
+                    
+                    # Validation heures
+                    h1 = str(r.get("h1", "00:00")).strip() if pd.notnull(r.get("h1")) else "00:00"
+                    h2 = str(r.get("h2", "23:59")).strip() if pd.notnull(r.get("h2")) else "23:59"
+                    
+                    # Vérification format HH:MM basique
+                    if not (len(h1) == 5 and h1[2] == ":"):
+                        errors.append(f"⚠️ Ligne {ligne}: Format heure début invalide (attendu HH:MM)")
+                        continue
+                    if not (len(h2) == 5 and h2[2] == ":"):
+                        errors.append(f"⚠️ Ligne {ligne}: Format heure fin invalide (attendu HH:MM)")
+                        continue
+                    
+                    # Commentaire
+                    comment = str(r.get("comment", "")).strip()
+                    
+                    cleaned.append({
+                        "app": r["app"],
+                        "env": r["env"],
+                        "type": r["type"],
+                        "d1": d1,
+                        "d2": d2,
+                        "h1": h1,
+                        "h2": h2,
+                        "comment": comment
+                    })
+            
+            # Afficher les erreurs ou sauvegarder
+            if errors:
+                for err in errors:
+                    st.error(err)
+            elif not cleaned:
+                st.warning("⚠️ Aucun événement à sauvegarder")
+            else:
+                with st.spinner("Sauvegarde en cours..."):
+                    save_events_db(cleaned)
+                    st.success(f"✅ {len(cleaned)} événement(s) sauvegardé(s) avec succès !")
+                    time.sleep(1)
+                    del st.session_state.data_loaded
+                    st.rerun()
+        
+        if cancel_btn:
+            del st.session_state.data_loaded
+            st.rerun()
 
 elif st.session_state.page == "planning":
     st.title(f"📅 Planning Visuel {sel_year}")
@@ -423,13 +645,29 @@ elif st.session_state.page == "planning":
     fr_holidays = holidays.France(years=sel_year)
     tabs = st.tabs(MONTHS_FR)
 
+    # Fonction helper pour obtenir la classe CSS d'un type d'événement
+    def get_event_class(event_type):
+        t_raw = str(event_type).upper()
+        if "MEP" in t_raw:
+            return "mep"
+        elif "INC" in t_raw:
+            return "inc"
+        elif "MAI" in t_raw:
+            return "mai"
+        elif "TEST" in t_raw:
+            return "test"
+        elif "TNR" in t_raw:
+            return "tnr"
+        elif "MOR" in t_raw:
+            return "mor"
+        return "mep"
+
     for i, tab in enumerate(tabs):
         with tab:
             m = i + 1
             days_in_m = calendar.monthrange(sel_year, m)[1]
             dates_m = [date(sel_year, m, d) for d in range(1, days_in_m + 1)]
             
-            # FIX 1 : Afficher toutes les apps même sans événements
             if not st.session_state.apps:
                 st.info("Aucune application enregistrée.")
                 continue
@@ -444,11 +682,9 @@ elif st.session_state.page == "planning":
                 html += f'<th class="{th_c}">{d.day}<br>{day_l}</th>'
             html += '</tr></thead><tbody>'
 
-            # FIX 1 : Parcourir TOUTES les apps (pas seulement celles avec événements)
             for app_n in st.session_state.apps:
                 html += f'<tr><td class="app-name">{app_n}</td>'
                 
-                # FIX 3 : Pour chaque jour, vérifier si un événement couvre ce jour
                 for d in dates_m:
                     td_class = []
                     content = ""
@@ -464,53 +700,54 @@ elif st.session_state.page == "planning":
                     h_name = fr_holidays.get(d)
                     if h_name:
                         td_class.append("ferie")
-                        if d.weekday() < 5:  # Afficher emoji seulement si pas week-end
+                        if d.weekday() < 5:
                             content = "🎉"
                     
-                    # FIX 3 : Chercher un événement qui COUVRE ce jour (pas seulement qui commence ce jour)
-                    matching_event = None
+                    # NOUVEAU: Collecter TOUS les événements qui couvrent ce jour
+                    matching_events = []
                     for ev in st.session_state.events:
                         if ev["app"] == app_n and ev["env"] == env_sel:
-                            # Vérifier si le jour actuel est dans la plage de l'événement
                             if ev["d1"] <= d <= ev["d2"]:
-                                matching_event = ev
-                                break
+                                matching_events.append(ev)
                     
-                    # Si événement trouvé pour ce jour
-                    if matching_event:
-                        ev = matching_event
-                        t_raw = str(ev["type"]).upper()
-                        
-                        # Déterminer la classe CSS
-                        if "MEP" in t_raw:
-                            t_cls = "mep"
-                        elif "INC" in t_raw:
-                            t_cls = "inc"
-                        elif "MAI" in t_raw:
-                            t_cls = "mai"
-                        elif "TEST" in t_raw:
-                            t_cls = "test"
-                        elif "TNR" in t_raw:
-                            t_cls = "tnr"
-                        elif "MOR" in t_raw:
-                            t_cls = "mor"
+                    # Si des événements sont trouvés pour ce jour
+                    if matching_events:
+                        if len(matching_events) == 1:
+                            # UN SEUL événement - affichage classique
+                            ev = matching_events[0]
+                            t_cls = get_event_class(ev["type"])
+                            t_raw = str(ev["type"]).upper()
+                            content = f'<div class="event-cell {t_cls}">{t_raw[:3]}</div>'
                         else:
-                            t_cls = "mep"  # Par défaut
+                            # PLUSIEURS événements - affichage en bandes
+                            content = '<div class="multi-event">'
+                            for ev in matching_events:
+                                t_cls = get_event_class(ev["type"])
+                                t_raw = str(ev["type"]).upper()
+                                content += f'<div class="event-band bg-{t_cls}">{t_raw[:3]}</div>'
+                            content += '</div>'
                         
-                        content = f'<div class="event-cell {t_cls}">{t_raw[:3]}</div>'
-                        
-                        # Construction du tooltip
-                        dur = (ev["d2"] - ev["d1"]).days + 1
-                        comment_text = str(ev.get('comment', '-')).replace('<', '&lt;').replace('>', '&gt;')
-                        
-                        tooltip_content = f'''<div class="tooltip-box">
+                        # Construction du tooltip avec TOUS les événements
+                        tooltip_parts = []
+                        for idx, ev in enumerate(matching_events):
+                            dur = (ev["d2"] - ev["d1"]).days + 1
+                            comment_text = str(ev.get('comment', '-')).replace('<', '&lt;').replace('>', '&gt;')
+                            
+                            separator = '<div class="tooltip-separator"></div>' if idx > 0 else ''
+                            
+                            tooltip_parts.append(f'''{separator}
 <strong style="color:#60a5fa; font-size:13px; display:block; margin-bottom:8px;">📋 {ev['type']}</strong>
 <span class="tooltip-label">📱 App:</span> {ev['app']}<br>
 <span class="tooltip-label">⏰ Heures:</span> {ev.get('h1','00:00')} - {ev.get('h2','23:59')}<br>
 <span class="tooltip-label">📅 Dates:</span> {ev['d1'].strftime('%d/%m')} au {ev['d2'].strftime('%d/%m')}<br>
 <span class="tooltip-label">⏱️ Durée:</span> {dur} jour(s)<br>
-{f'<span class="tooltip-label">🎉 Férié:</span> {h_name}<br>' if h_name else ''}<span class="tooltip-label">💬 Note:</span> {comment_text if comment_text != '-' else '<i>Aucune</i>'}
-</div>'''
+<span class="tooltip-label">💬 Note:</span> {comment_text if comment_text and comment_text != '-' else '<i>Aucune</i>'}''')
+                        
+                        # Ajouter info férié si applicable
+                        if h_name:
+                            tooltip_parts.append(f'<br><span class="tooltip-label">🎉 Férié:</span> {h_name}')
+                        
+                        tooltip_content = f'''<div class="tooltip-box">{''.join(tooltip_parts)}</div>'''
                         
                         # Assemblage de la cellule avec tooltip
                         class_str = " ".join(td_class) if td_class else ""
