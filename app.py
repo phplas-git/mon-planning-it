@@ -1098,67 +1098,68 @@ elif st.session_state.page == "dashboard":
             # Tableau détaillé par application
             st.markdown("### 📋 Détail par application")
             
-            # Créer le HTML du tableau
-            table_html = '''
-            <style>
-                .dash-table { width: 100%; border-collapse: collapse; font-family: sans-serif; font-size: 14px; }
-                .dash-table th { background-color: #1e293b; color: white; padding: 12px 15px; text-align: left; }
-                .dash-table td { padding: 12px 15px; border-bottom: 1px solid #e2e8f0; }
-                .dash-table tr:hover { background-color: #f8fafc; }
-                .bar-container { width: 100%; background-color: #e2e8f0; border-radius: 4px; height: 24px; position: relative; }
-                .bar-fill { height: 100%; border-radius: 4px; display: flex; align-items: center; justify-content: flex-end; padding-right: 8px; color: white; font-weight: bold; font-size: 12px; }
-                .bar-green { background: linear-gradient(90deg, #22c55e, #16a34a); }
-                .bar-yellow { background: linear-gradient(90deg, #eab308, #ca8a04); }
-                .bar-red { background: linear-gradient(90deg, #ef4444, #dc2626); }
-                .status-badge { padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: bold; }
-                .badge-green { background-color: #dcfce7; color: #166534; }
-                .badge-yellow { background-color: #fef9c3; color: #854d0e; }
-                .badge-red { background-color: #fee2e2; color: #991b1b; }
-            </style>
-            <table class="dash-table">
-                <thead>
-                    <tr>
-                        <th style="width: 150px;">Application</th>
-                        <th style="width: 80px; text-align: center;">Jours ouvrés</th>
-                        <th style="width: 80px; text-align: center;">Indisponible</th>
-                        <th style="width: 80px; text-align: center;">Disponible</th>
-                        <th style="width: 300px;">Disponibilité</th>
-                        <th style="width: 80px; text-align: center;">Statut</th>
-                    </tr>
-                </thead>
-                <tbody>
-            '''
+            # En-têtes du tableau
+            header_col1, header_col2, header_col3, header_col4, header_col5, header_col6 = st.columns([2, 1, 1, 1, 4, 1])
+            with header_col1:
+                st.markdown("**Application**")
+            with header_col2:
+                st.markdown("<div style='text-align:center'><strong>Jours ouvrés</strong></div>", unsafe_allow_html=True)
+            with header_col3:
+                st.markdown("<div style='text-align:center'><strong>Indispo.</strong></div>", unsafe_allow_html=True)
+            with header_col4:
+                st.markdown("<div style='text-align:center'><strong>Dispo.</strong></div>", unsafe_allow_html=True)
+            with header_col5:
+                st.markdown("**Disponibilité**")
+            with header_col6:
+                st.markdown("<div style='text-align:center'><strong>Statut</strong></div>", unsafe_allow_html=True)
+            
+            st.divider()
             
             # Trier par disponibilité (du plus bas au plus haut pour mettre en évidence les problèmes)
             results_sorted = sorted(results, key=lambda x: x["availability"])
             
+            # Utiliser des colonnes Streamlit pour chaque application
             for r in results_sorted:
                 avail = r["availability"]
-                bar_class = "bar-green" if avail >= 95 else "bar-yellow" if avail >= 80 else "bar-red"
-                badge_class = "badge-green" if avail >= 95 else "badge-yellow" if avail >= 80 else "badge-red"
-                status_text = "✓ OK" if avail >= 95 else "⚠ Moyen" if avail >= 80 else "✗ Critique"
                 
-                table_html += f'''
-                    <tr>
-                        <td><strong>{r["app"]}</strong></td>
-                        <td style="text-align: center;">{r["total"]}</td>
-                        <td style="text-align: center; color: #dc2626;">{r["unavailable"]}</td>
-                        <td style="text-align: center; color: #16a34a;">{r["available"]}</td>
-                        <td>
-                            <div class="bar-container">
-                                <div class="bar-fill {bar_class}" style="width: {avail}%;">{avail:.1f}%</div>
-                            </div>
-                        </td>
-                        <td style="text-align: center;"><span class="status-badge {badge_class}">{status_text}</span></td>
-                    </tr>
-                '''
+                # Déterminer la couleur et le statut
+                if avail >= 95:
+                    color = "#22c55e"
+                    status = "✓ OK"
+                    status_bg = "#dcfce7"
+                    status_color = "#166534"
+                elif avail >= 80:
+                    color = "#eab308"
+                    status = "⚠ Moyen"
+                    status_bg = "#fef9c3"
+                    status_color = "#854d0e"
+                else:
+                    color = "#ef4444"
+                    status = "✗ Critique"
+                    status_bg = "#fee2e2"
+                    status_color = "#991b1b"
+                
+                # Ligne pour chaque application
+                col1, col2, col3, col4, col5, col6 = st.columns([2, 1, 1, 1, 4, 1])
+                
+                with col1:
+                    st.markdown(f"**{r['app']}**")
+                with col2:
+                    st.markdown(f"<div style='text-align:center'>{r['total']}</div>", unsafe_allow_html=True)
+                with col3:
+                    st.markdown(f"<div style='text-align:center; color:#dc2626;'>{r['unavailable']}</div>", unsafe_allow_html=True)
+                with col4:
+                    st.markdown(f"<div style='text-align:center; color:#16a34a;'>{r['available']}</div>", unsafe_allow_html=True)
+                with col5:
+                    st.progress(avail / 100)
+                    st.caption(f"{avail:.1f}%")
+                with col6:
+                    st.markdown(f"<div style='text-align:center; background-color:{status_bg}; color:{status_color}; padding:4px 8px; border-radius:4px; font-size:12px; font-weight:bold;'>{status}</div>", unsafe_allow_html=True)
             
-            table_html += '</tbody></table>'
-            
-            st.markdown(table_html, unsafe_allow_html=True)
+            # En-têtes (affichés une seule fois au-dessus)
+            st.markdown("")
             
             # Légende
-            st.markdown("")
             col_leg1, col_leg2, col_leg3 = st.columns(3)
             with col_leg1:
                 st.markdown("🟢 **≥ 95%** : Objectif atteint")
