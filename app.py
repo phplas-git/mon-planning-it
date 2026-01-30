@@ -424,8 +424,8 @@ with st.sidebar:
     if st.button("📱 Applications", use_container_width=True): st.session_state.page = "apps"; st.rerun()
     if st.button("📁 Projets", use_container_width=True): st.session_state.page = "projets"; st.rerun()
     st.divider()
-    years_list = [2025, 2026, 2027, 2028]
-    sel_year = st.selectbox("Année", years_list, index=years_list.index(TODAY.year) if TODAY.year in years_list else 1)
+    years_list = [2026, 2027, 2028, 2029, 2030]
+    sel_year = st.selectbox("Année", years_list, index=years_list.index(TODAY.year) if TODAY.year in years_list else 0)
     st.divider()
     
     # FORMULAIRE D'AJOUT RAPIDE (uniquement sur la page planning)
@@ -472,6 +472,12 @@ with st.sidebar:
                 with st.spinner("Ajout en cours..."):
                     st.session_state.events.append(new_event)
                     save_events_db(st.session_state.events)
+                    
+                    # Mémoriser l'environnement et le mois pour la navigation après rerun
+                    st.session_state.nav_to_env = q_env
+                    st.session_state.nav_to_month = q_d1.month - 1  # Index 0-based pour les tabs
+                    st.session_state.nav_to_year = q_d1.year
+                    
                     st.success("✅ Événement ajouté !")
                     time.sleep(0.5)
                     del st.session_state.data_loaded
@@ -789,8 +795,19 @@ elif st.session_state.page == "events":
 elif st.session_state.page == "planning":
     st.title(f"📅 Planning Visuel {sel_year}")
     
+    # Récupérer l'environnement de navigation (après ajout d'événement)
+    default_env_index = 0  # PROD par défaut
+    if "nav_to_env" in st.session_state:
+        env_list = ["PROD", "PRÉPROD", "RECETTE"]
+        if st.session_state.nav_to_env in env_list:
+            default_env_index = env_list.index(st.session_state.nav_to_env)
+    
     # Sélection de l'environnement
-    env_sel = st.radio("Secteur :", ["PROD", "PRÉPROD", "RECETTE"], horizontal=True)
+    env_sel = st.radio("Secteur :", ["PROD", "PRÉPROD", "RECETTE"], horizontal=True, index=default_env_index, key="env_radio")
+    
+    # Nettoyer la navigation après utilisation
+    if "nav_to_env" in st.session_state:
+        del st.session_state.nav_to_env
     
     # Filtre par projet (uniquement pour RECETTE)
     projet_filter = None
@@ -806,6 +823,15 @@ elif st.session_state.page == "planning":
             st.caption(f"ℹ️ Affichage du projet **{projet_filter}** + événements sans projet")
     
     fr_holidays = holidays.France(years=sel_year)
+    
+    # Récupérer le mois de navigation (après ajout d'événement)
+    default_tab = None
+    if "nav_to_month" in st.session_state:
+        default_tab = MONTHS_FR[st.session_state.nav_to_month]
+        del st.session_state.nav_to_month
+    if "nav_to_year" in st.session_state:
+        del st.session_state.nav_to_year
+    
     tabs = st.tabs(MONTHS_FR)
 
     # Fonction helper pour obtenir la classe CSS d'un type d'événement
@@ -961,7 +987,7 @@ elif st.session_state.page == "dashboard":
         col_period1, col_period2 = st.columns([1, 1])
         
         with col_period1:
-            years_list = [2025, 2026, 2027, 2028]
+            years_list = [2026, 2027, 2028, 2029, 2030]
             dash_year = st.selectbox("📅 Année", years_list, index=years_list.index(TODAY.year) if TODAY.year in years_list else 0, key="dash_year")
         
         with col_period2:
