@@ -5,7 +5,12 @@ from datetime import date, datetime
 from supabase import create_client, Client
 import time
 import holidays
+# Indicateur visuel d'environnement
+is_dev = "dev" in st.secrets["supabase"]["url"].lower()
 
+if is_dev:
+    st.sidebar.warning("⚠️ MODE DÉVELOPPEMENT")
+    st.sidebar.caption("Connecté à : Planning-IT-DEV")
 # ==================================================
 # 1. CONFIGURATION & CONNEXION DB
 # ==================================================
@@ -469,3 +474,4 @@ elif st.session_state.page == "planning":
             
             html += '</tbody></table></div>'
             st.markdown(html, unsafe_allow_html=True)
+
