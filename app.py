@@ -42,12 +42,19 @@ supabase = init_connection()
 
 # --- FONCTIONS CRUD ---
 def load_data():
-    if not supabase: return [], [], []
+    if not supabase: return [], [], [], [], []
     try:
+        # Charger les applications
         res_apps = supabase.table("applications").select("*").order("ordre", desc=False).execute()
         apps_full = res_apps.data
         apps_names = [row['nom'] for row in apps_full]
         
+        # Charger les projets
+        res_projets = supabase.table("projets").select("*").order("projet", desc=False).execute()
+        projets_full = res_projets.data
+        projets_names = [row['projet'] for row in projets_full]
+        
+        # Charger les événements
         res_evts = supabase.table("evenements").select("*").execute()
         evts_data = res_evts.data
         for ev in evts_data:
@@ -55,10 +62,11 @@ def load_data():
             ev['d2'] = pd.to_datetime(ev['d2']).date()
             if 'h1' not in ev: ev['h1'] = "00:00"
             if 'h2' not in ev: ev['h2'] = "23:59"
-        return apps_names, apps_full, evts_data
+            if 'projet' not in ev: ev['projet'] = None
+        return apps_names, apps_full, evts_data, projets_names, projets_full
     except Exception as e:
         st.error(f"Erreur lecture : {e}")
-        return [], [], []
+        return [], [], [], [], []
 
 def save_apps_db(df_apps):
     if not supabase: return
@@ -67,6 +75,15 @@ def save_apps_db(df_apps):
         data = [{"nom": str(row['Nom']).upper().strip(), "ordre": int(row['Ordre'])} for _, row in df_apps.iterrows() if row['Nom']]
         if data: supabase.table("applications").insert(data).execute()
     except Exception as e: st.error(f"Erreur Apps : {e}")
+
+def save_projets_db(projet_list):
+    if not supabase: return
+    try:
+        supabase.table("projets").delete().neq("id", 0).execute()
+        if projet_list:
+            data = [{"projet": str(p).upper().strip()} for p in projet_list if p and str(p).strip()]
+            if data: supabase.table("projets").insert(data).execute()
+    except Exception as e: st.error(f"Erreur Projets : {e}")
 
 def save_events_db(event_list):
     if not supabase: return
@@ -78,7 +95,8 @@ def save_events_db(event_list):
                 "d1": pd.to_datetime(ev['d1']).strftime('%Y-%m-%d'),
                 "d2": pd.to_datetime(ev['d2']).strftime('%Y-%m-%d'),
                 "h1": ev.get('h1', '00:00'), "h2": ev.get('h2', '23:59'),
-                "comment": str(ev['comment'])
+                "comment": str(ev['comment']),
+                "projet": ev.get('projet') if ev.get('projet') else None
             } for ev in event_list]
             supabase.table("evenements").insert(data).execute()
     except Exception as e: st.error(f"Erreur Events : {e}")
@@ -88,8 +106,9 @@ TODAY = date.today()
 MONTHS_FR = ["Janvier","Février","Mars","Avril","Mai","Juin","Juillet","Août","Septembre","Octobre","Novembre","Décembre"]
 
 if "data_loaded" not in st.session_state:
-    an, af, ed = load_data()
+    an, af, ed, pn, pf = load_data()
     st.session_state.apps, st.session_state.apps_data, st.session_state.events = an, af, ed
+    st.session_state.projets, st.session_state.projets_data = pn, pf
     st.session_state.data_loaded = True
 if "page" not in st.session_state: st.session_state.page = "planning"
 
@@ -402,6 +421,7 @@ with st.sidebar:
     if st.button("📅 Planning", use_container_width=True): st.session_state.page = "planning"; st.rerun()
     if st.button("📝 Événements", use_container_width=True): st.session_state.page = "events"; st.rerun()
     if st.button("📱 Applications", use_container_width=True): st.session_state.page = "apps"; st.rerun()
+    if st.button("📁 Projets", use_container_width=True): st.session_state.page = "projets"; st.rerun()
     st.divider()
     years_list = [2025, 2026, 2027, 2028]
     sel_year = st.selectbox("Année", years_list, index=years_list.index(TODAY.year) if TODAY.year in years_list else 1)
@@ -415,6 +435,10 @@ with st.sidebar:
             q_app = st.selectbox("📱 Application", st.session_state.apps)
             q_env = st.selectbox("🌐 Environnement", ["PROD", "PRÉPROD", "RECETTE"])
             q_type = st.selectbox("🏷️ Type", ["MEP", "INCIDENT", "MAINTENANCE", "TEST", "TNR", "MORATOIRE"])
+            
+            # Projet (optionnel)
+            projet_options = ["(Aucun)"] + st.session_state.projets
+            q_projet = st.selectbox("📁 Projet", projet_options)
             
             col1, col2 = st.columns(2)
             with col1:
@@ -441,7 +465,8 @@ with st.sidebar:
                     "d2": q_d2,
                     "h1": q_h1,
                     "h2": q_h2,
-                    "comment": q_comment
+                    "comment": q_comment,
+                    "projet": q_projet if q_projet != "(Aucun)" else None
                 }
                 with st.spinner("Ajout en cours..."):
                     st.session_state.events.append(new_event)
@@ -526,19 +551,104 @@ if st.session_state.page == "apps":
         del st.session_state.data_loaded
         st.rerun()
 
+elif st.session_state.page == "projets":
+    st.title("📁 Gestion des Projets")
+    
+    # Préparation des données
+    df_projets = pd.DataFrame({"Projet": st.session_state.projets}) if st.session_state.projets else pd.DataFrame(columns=["Projet"])
+    
+    # Data editor
+    edited_projets = st.data_editor(
+        df_projets, 
+        num_rows="dynamic", 
+        use_container_width=True, 
+        hide_index=True, 
+        key="ed_projets",
+        column_config={
+            "Projet": st.column_config.TextColumn("Nom du projet", help="Nom du projet (majuscules)", max_chars=100, required=True)
+        }
+    )
+    
+    # Afficher le nombre de projets
+    nb_projets = len([row for _, row in edited_projets.iterrows() if row['Projet'] and str(row['Projet']).strip()])
+    st.caption(f"📊 {nb_projets} projet(s)")
+    
+    col1, col2, col3 = st.columns([1, 1, 3])
+    with col1:
+        save_btn = st.button("💾 Sauvegarder", type="primary", use_container_width=True, key="save_projets")
+    with col2:
+        cancel_btn = st.button("↩️ Annuler", use_container_width=True, key="cancel_projets")
+    
+    if save_btn:
+        # Récupérer les projets valides
+        valid_projets = [str(row['Projet']).upper().strip() for _, row in edited_projets.iterrows() if row['Projet'] and str(row['Projet']).strip()]
+        
+        # Vérifier les doublons
+        if len(valid_projets) != len(set(valid_projets)):
+            st.error("⚠️ Il y a des noms de projets en double")
+        else:
+            with st.spinner("Sauvegarde en cours..."):
+                save_projets_db(valid_projets)
+                st.success(f"✅ {len(valid_projets)} projet(s) sauvegardé(s) avec succès !")
+                time.sleep(1)
+                del st.session_state.data_loaded
+                st.rerun()
+    
+    if cancel_btn:
+        del st.session_state.data_loaded
+        st.rerun()
+
 elif st.session_state.page == "events":
     st.title("📝 Gestion des Événements")
     if not st.session_state.apps: 
         st.warning("⚠️ Ajoutez d'abord des applications dans l'onglet 📱 Applications")
     else:
+        # FILTRES RAPIDES
+        st.markdown("### 🔍 Filtres rapides")
+        col_f1, col_f2, col_f3, col_f4 = st.columns(4)
+        
+        with col_f1:
+            filter_app = st.selectbox("📱 Application", ["Toutes"] + st.session_state.apps, key="filter_app")
+        with col_f2:
+            filter_env = st.selectbox("🌐 Environnement", ["Tous", "PROD", "PRÉPROD", "RECETTE"], key="filter_env")
+        with col_f3:
+            filter_type = st.selectbox("🏷️ Type", ["Tous", "MEP", "INCIDENT", "MAINTENANCE", "TEST", "TNR", "MORATOIRE"], key="filter_type")
+        with col_f4:
+            filter_projet = st.selectbox("📁 Projet", ["Tous", "(Sans projet)"] + st.session_state.projets, key="filter_projet")
+        
+        st.divider()
+        
         # Préparation des données
         df_evts = pd.DataFrame(st.session_state.events if st.session_state.events else None)
-        cols = ["app", "env", "type", "d1", "d2", "h1", "h2", "comment"]
-        display_df = df_evts[cols] if not df_evts.empty else pd.DataFrame(columns=cols)
+        cols = ["app", "env", "type", "projet", "d1", "d2", "h1", "h2", "comment"]
+        
+        if not df_evts.empty:
+            # S'assurer que la colonne projet existe
+            if 'projet' not in df_evts.columns:
+                df_evts['projet'] = None
+            display_df = df_evts[cols].copy()
+        else:
+            display_df = pd.DataFrame(columns=cols)
+        
+        # Appliquer les filtres pour l'affichage
+        filtered_df = display_df.copy()
+        if filter_app != "Toutes":
+            filtered_df = filtered_df[filtered_df['app'] == filter_app]
+        if filter_env != "Tous":
+            filtered_df = filtered_df[filtered_df['env'] == filter_env]
+        if filter_type != "Tous":
+            filtered_df = filtered_df[filtered_df['type'] == filter_type]
+        if filter_projet == "(Sans projet)":
+            filtered_df = filtered_df[filtered_df['projet'].isna() | (filtered_df['projet'] == "") | (filtered_df['projet'].isnull())]
+        elif filter_projet != "Tous":
+            filtered_df = filtered_df[filtered_df['projet'] == filter_projet]
+        
+        # Options pour le selectbox projet (avec option vide)
+        projet_options_edit = [""] + st.session_state.projets
         
         # Data editor avec configuration améliorée
         edited_evts = st.data_editor(
-            display_df, 
+            filtered_df, 
             num_rows="dynamic", 
             use_container_width=True, 
             hide_index=True,
@@ -546,6 +656,7 @@ elif st.session_state.page == "events":
                 "app": st.column_config.SelectboxColumn("App", options=st.session_state.apps, help="Application concernée", required=True),
                 "env": st.column_config.SelectboxColumn("Env", options=["PROD", "PRÉPROD", "RECETTE"], help="Environnement", required=True),
                 "type": st.column_config.SelectboxColumn("Type", options=["MEP", "INCIDENT", "MAINTENANCE", "TEST", "TNR", "MORATOIRE"], help="Type d'événement", required=True),
+                "projet": st.column_config.SelectboxColumn("Projet", options=projet_options_edit, help="Projet associé (optionnel)", required=False),
                 "d1": st.column_config.DateColumn("Date début", format="DD/MM/YYYY", help="Date de début", required=True),
                 "d2": st.column_config.DateColumn("Date fin", format="DD/MM/YYYY", help="Date de fin", required=True),
                 "h1": st.column_config.TextColumn("H. début", help="Heure début (HH:MM)", default="00:00", max_chars=5),
@@ -557,7 +668,12 @@ elif st.session_state.page == "events":
         
         # Afficher le nombre d'événements
         nb_events = len([r for _, r in edited_evts.iterrows() if pd.notnull(r.get("app")) and pd.notnull(r.get("d1"))])
-        st.caption(f"📊 {nb_events} événement(s)")
+        nb_total = len([r for _, r in display_df.iterrows() if pd.notnull(r.get("app")) and pd.notnull(r.get("d1"))])
+        
+        if filter_app != "Toutes" or filter_env != "Tous" or filter_type != "Tous" or filter_projet != "Tous":
+            st.caption(f"📊 {nb_events} événement(s) affiché(s) sur {nb_total} au total (filtres actifs)")
+        else:
+            st.caption(f"📊 {nb_events} événement(s)")
         
         col1, col2, col3 = st.columns([1, 1, 3])
         with col1:
@@ -566,6 +682,10 @@ elif st.session_state.page == "events":
             cancel_btn = st.button("↩️ Annuler", use_container_width=True)
         
         if save_btn:
+            # IMPORTANT: Si des filtres sont actifs, on doit fusionner avec les événements non filtrés
+            if filter_app != "Toutes" or filter_env != "Tous" or filter_type != "Tous" or filter_projet != "Tous":
+                st.warning("⚠️ Des filtres sont actifs. La sauvegarde ne modifiera que les événements affichés. Les autres événements seront conservés.")
+            
             # Validation
             cleaned = []
             errors = []
@@ -607,8 +727,9 @@ elif st.session_state.page == "events":
                         errors.append(f"⚠️ Ligne {ligne}: Format heure fin invalide (attendu HH:MM)")
                         continue
                     
-                    # Commentaire
+                    # Commentaire et projet
                     comment = str(r.get("comment", "")).strip()
+                    projet = r.get("projet") if pd.notnull(r.get("projet")) and r.get("projet") != "" else None
                     
                     cleaned.append({
                         "app": r["app"],
@@ -618,19 +739,44 @@ elif st.session_state.page == "events":
                         "d2": d2,
                         "h1": h1,
                         "h2": h2,
-                        "comment": comment
+                        "comment": comment,
+                        "projet": projet
                     })
             
             # Afficher les erreurs ou sauvegarder
             if errors:
                 for err in errors:
                     st.error(err)
-            elif not cleaned:
-                st.warning("⚠️ Aucun événement à sauvegarder")
             else:
                 with st.spinner("Sauvegarde en cours..."):
-                    save_events_db(cleaned)
-                    st.success(f"✅ {len(cleaned)} événement(s) sauvegardé(s) avec succès !")
+                    # Si des filtres sont actifs, fusionner avec les événements non affichés
+                    if filter_app != "Toutes" or filter_env != "Tous" or filter_type != "Tous" or filter_projet != "Tous":
+                        # Garder les événements qui ne correspondent pas aux filtres
+                        final_events = []
+                        for ev in st.session_state.events:
+                            keep = False
+                            if filter_app != "Toutes" and ev.get('app') != filter_app:
+                                keep = True
+                            elif filter_env != "Tous" and ev.get('env') != filter_env:
+                                keep = True
+                            elif filter_type != "Tous" and ev.get('type') != filter_type:
+                                keep = True
+                            elif filter_projet == "(Sans projet)" and ev.get('projet') and ev.get('projet') != "":
+                                keep = True
+                            elif filter_projet != "Tous" and filter_projet != "(Sans projet)" and ev.get('projet') != filter_projet:
+                                keep = True
+                            
+                            if keep:
+                                final_events.append(ev)
+                        
+                        # Ajouter les événements édités
+                        final_events.extend(cleaned)
+                        save_events_db(final_events)
+                        st.success(f"✅ Sauvegarde réussie ! ({len(cleaned)} événement(s) modifié(s), {len(final_events)} au total)")
+                    else:
+                        save_events_db(cleaned)
+                        st.success(f"✅ {len(cleaned)} événement(s) sauvegardé(s) avec succès !")
+                    
                     time.sleep(1)
                     del st.session_state.data_loaded
                     st.rerun()
@@ -641,7 +787,23 @@ elif st.session_state.page == "events":
 
 elif st.session_state.page == "planning":
     st.title(f"📅 Planning Visuel {sel_year}")
+    
+    # Sélection de l'environnement
     env_sel = st.radio("Secteur :", ["PROD", "PRÉPROD", "RECETTE"], horizontal=True)
+    
+    # Filtre par projet (uniquement pour RECETTE)
+    projet_filter = None
+    if env_sel == "RECETTE" and st.session_state.projets:
+        projet_options = ["📋 Afficher tout", "📋 Afficher tout (hors projet)"] + st.session_state.projets
+        projet_filter = st.selectbox("📁 Filtrer par projet :", projet_options, key="planning_projet_filter")
+        
+        if projet_filter == "📋 Afficher tout":
+            st.caption("ℹ️ Affichage de tous les événements")
+        elif projet_filter == "📋 Afficher tout (hors projet)":
+            st.caption("ℹ️ Affichage uniquement des événements sans projet associé")
+        else:
+            st.caption(f"ℹ️ Affichage du projet **{projet_filter}** + événements sans projet")
+    
     fr_holidays = holidays.France(years=sel_year)
     tabs = st.tabs(MONTHS_FR)
 
@@ -661,6 +823,29 @@ elif st.session_state.page == "planning":
         elif "MOR" in t_raw:
             return "mor"
         return "mep"
+    
+    # Fonction pour filtrer les événements selon le projet (RECETTE uniquement)
+    def should_show_event(ev, env_sel, projet_filter):
+        # Vérifier l'environnement
+        if ev["env"] != env_sel:
+            return False
+        
+        # Si pas en RECETTE ou pas de filtre projet, afficher tout
+        if env_sel != "RECETTE" or projet_filter is None:
+            return True
+        
+        ev_projet = ev.get("projet")
+        has_no_projet = ev_projet is None or ev_projet == "" or pd.isna(ev_projet)
+        
+        if projet_filter == "📋 Afficher tout":
+            # Afficher TOUS les événements (avec ou sans projet)
+            return True
+        elif projet_filter == "📋 Afficher tout (hors projet)":
+            # Afficher uniquement les événements SANS projet
+            return has_no_projet
+        else:
+            # Afficher le projet sélectionné + les événements sans projet
+            return has_no_projet or ev_projet == projet_filter
 
     for i, tab in enumerate(tabs):
         with tab:
@@ -703,10 +888,10 @@ elif st.session_state.page == "planning":
                         if d.weekday() < 5:
                             content = "🎉"
                     
-                    # NOUVEAU: Collecter TOUS les événements qui couvrent ce jour
+                    # Collecter les événements qui couvrent ce jour (avec filtre projet si RECETTE)
                     matching_events = []
                     for ev in st.session_state.events:
-                        if ev["app"] == app_n and ev["env"] == env_sel:
+                        if ev["app"] == app_n and should_show_event(ev, env_sel, projet_filter):
                             if ev["d1"] <= d <= ev["d2"]:
                                 matching_events.append(ev)
                     
@@ -732,13 +917,16 @@ elif st.session_state.page == "planning":
                         for idx, ev in enumerate(matching_events):
                             dur = (ev["d2"] - ev["d1"]).days + 1
                             comment_text = str(ev.get('comment', '-')).replace('<', '&lt;').replace('>', '&gt;')
+                            projet_text = ev.get('projet') if ev.get('projet') and ev.get('projet') != "" else None
                             
                             separator = '<div class="tooltip-separator"></div>' if idx > 0 else ''
+                            
+                            projet_line = f'<span class="tooltip-label">📁 Projet:</span> {projet_text}<br>' if projet_text else ''
                             
                             tooltip_parts.append(f'''{separator}
 <strong style="color:#60a5fa; font-size:13px; display:block; margin-bottom:8px;">📋 {ev['type']}</strong>
 <span class="tooltip-label">📱 App:</span> {ev['app']}<br>
-<span class="tooltip-label">⏰ Heures:</span> {ev.get('h1','00:00')} - {ev.get('h2','23:59')}<br>
+{projet_line}<span class="tooltip-label">⏰ Heures:</span> {ev.get('h1','00:00')} - {ev.get('h2','23:59')}<br>
 <span class="tooltip-label">📅 Dates:</span> {ev['d1'].strftime('%d/%m')} au {ev['d2'].strftime('%d/%m')}<br>
 <span class="tooltip-label">⏱️ Durée:</span> {dur} jour(s)<br>
 <span class="tooltip-label">💬 Note:</span> {comment_text if comment_text and comment_text != '-' else '<i>Aucune</i>'}''')
