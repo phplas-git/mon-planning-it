@@ -958,7 +958,7 @@ elif st.session_state.page == "dashboard":
         st.warning("⚠️ Aucune application enregistrée.")
     else:
         # Sélection de la période
-        col_period1, col_period2, col_period3 = st.columns([1, 1, 2])
+        col_period1, col_period2 = st.columns([1, 1])
         
         with col_period1:
             years_list = [2025, 2026, 2027, 2028]
@@ -967,14 +967,6 @@ elif st.session_state.page == "dashboard":
         with col_period2:
             period_options = ["Année complète"] + MONTHS_FR
             dash_period = st.selectbox("📆 Période", period_options, key="dash_period")
-        
-        # Filtre par projet (optionnel)
-        with col_period3:
-            if st.session_state.projets:
-                projet_options_dash = ["Tous les projets", "Sans projet uniquement"] + st.session_state.projets
-                dash_projet = st.selectbox("📁 Projet", projet_options_dash, key="dash_projet")
-            else:
-                dash_projet = "Tous les projets"
         
         st.divider()
         
@@ -1003,7 +995,7 @@ elif st.session_state.page == "dashboard":
             return working_days
         
         # Fonction pour vérifier si un événement doit être pris en compte
-        def should_count_event(ev, dash_projet):
+        def should_count_event(ev):
             # Environnement RECETTE uniquement
             if ev.get("env") != "RECETTE":
                 return False
@@ -1013,16 +1005,7 @@ elif st.session_state.page == "dashboard":
             if "MAI" not in ev_type and "INC" not in ev_type:
                 return False
             
-            # Filtre par projet
-            ev_projet = ev.get("projet")
-            has_no_projet = ev_projet is None or ev_projet == "" or pd.isna(ev_projet)
-            
-            if dash_projet == "Tous les projets":
-                return True
-            elif dash_projet == "Sans projet uniquement":
-                return has_no_projet
-            else:
-                return has_no_projet or ev_projet == dash_projet
+            return True
         
         # Déterminer la période
         if dash_period == "Année complète":
@@ -1046,7 +1029,7 @@ elif st.session_state.page == "dashboard":
                 unavailable_days = set()
                 
                 for ev in st.session_state.events:
-                    if ev.get("app") == app_name and should_count_event(ev, dash_projet):
+                    if ev.get("app") == app_name and should_count_event(ev):
                         # Parcourir tous les jours de l'événement
                         current = ev["d1"]
                         while current <= ev["d2"]:
@@ -1175,7 +1158,7 @@ elif st.session_state.page == "dashboard":
             # Filtrer les événements de la période
             events_in_period = []
             for ev in st.session_state.events:
-                if should_count_event(ev, dash_projet):
+                if should_count_event(ev):
                     # Vérifier si l'événement chevauche la période
                     if dash_period == "Année complète":
                         if ev["d1"].year == dash_year or ev["d2"].year == dash_year:
