@@ -371,51 +371,183 @@ with st.sidebar:
 
 if st.session_state.page == "apps":
     st.title("📱 Gestion des Applications")
+    
+    # Préparation des données
     clean_data = [{"Nom": i.get('nom', ''), "Ordre": i.get('ordre', 0)} for i in st.session_state.apps_data]
     df_apps = pd.DataFrame(clean_data if clean_data else None, columns=["Nom", "Ordre"])
-    edited_apps = st.data_editor(df_apps, num_rows="dynamic", use_container_width=True, hide_index=True, key="ed_apps")
     
-    col1, col2 = st.columns([1, 4])
+    # Data editor avec configuration
+    edited_apps = st.data_editor(
+        df_apps, 
+        num_rows="dynamic", 
+        use_container_width=True, 
+        hide_index=True, 
+        key="ed_apps",
+        column_config={
+            "Nom": st.column_config.TextColumn("Nom", help="Nom de l'application (majuscules)", max_chars=50, required=True),
+            "Ordre": st.column_config.NumberColumn("Ordre", help="Ordre d'affichage", min_value=0, max_value=999, step=1, required=True)
+        }
+    )
+    
+    # Afficher le nombre d'applications
+    nb_apps = len([row for _, row in edited_apps.iterrows() if row['Nom'] and str(row['Nom']).strip()])
+    st.caption(f"📊 {nb_apps} application(s)")
+    
+    col1, col2, col3 = st.columns([1, 1, 3])
     with col1:
         save_btn = st.button("💾 Sauvegarder", type="primary", use_container_width=True)
+    with col2:
+        cancel_btn = st.button("↩️ Annuler", use_container_width=True)
     
     if save_btn:
-        with st.spinner("Sauvegarde en cours..."):
-            save_apps_db(edited_apps.sort_values(by="Ordre"))
-            st.success("✅ Applications sauvegardées avec succès !")
-            time.sleep(1)
-            del st.session_state.data_loaded
-            st.rerun()
+        # Validation
+        valid_apps = []
+        errors = []
+        
+        for idx, row in edited_apps.iterrows():
+            nom = str(row['Nom']).strip() if pd.notnull(row['Nom']) else ""
+            
+            if nom:  # Seulement si le nom n'est pas vide
+                if pd.isnull(row['Ordre']):
+                    errors.append(f"⚠️ Ligne {idx+1}: L'ordre est obligatoire pour '{nom}'")
+                else:
+                    valid_apps.append({"Nom": nom.upper(), "Ordre": int(row['Ordre'])})
+        
+        if errors:
+            for err in errors:
+                st.error(err)
+        elif not valid_apps:
+            st.warning("⚠️ Aucune application à sauvegarder")
+        else:
+            # Vérifier les doublons
+            noms = [app['Nom'] for app in valid_apps]
+            if len(noms) != len(set(noms)):
+                st.error("⚠️ Il y a des noms d'applications en double")
+            else:
+                with st.spinner("Sauvegarde en cours..."):
+                    df_to_save = pd.DataFrame(valid_apps).sort_values(by="Ordre")
+                    save_apps_db(df_to_save)
+                    st.success(f"✅ {len(valid_apps)} application(s) sauvegardée(s) avec succès !")
+                    time.sleep(1)
+                    del st.session_state.data_loaded
+                    st.rerun()
+    
+    if cancel_btn:
+        del st.session_state.data_loaded
+        st.rerun()
 
 elif st.session_state.page == "events":
     st.title("📝 Gestion des Événements")
     if not st.session_state.apps: 
-        st.warning("Ajoutez des apps.")
+        st.warning("⚠️ Ajoutez d'abord des applications dans l'onglet 📱 Applications")
     else:
+        # Préparation des données
         df_evts = pd.DataFrame(st.session_state.events if st.session_state.events else None)
         cols = ["app", "env", "type", "d1", "d2", "h1", "h2", "comment"]
         display_df = df_evts[cols] if not df_evts.empty else pd.DataFrame(columns=cols)
-        edited_evts = st.data_editor(display_df, num_rows="dynamic", use_container_width=True, hide_index=True, 
-                                     column_config={"app": st.column_config.SelectboxColumn("App", options=st.session_state.apps),
-                                                    "env": st.column_config.SelectboxColumn("Env", options=["PROD", "PRÉPROD", "RECETTE"]),
-                                                    "type": st.column_config.SelectboxColumn("Type", options=["MEP", "INCIDENT", "MAINTENANCE", "TEST", "TNR", "MORATOIRE"])}, key="ed_evts")
         
-        col1, col2 = st.columns([1, 4])
+        # Data editor avec configuration améliorée
+        edited_evts = st.data_editor(
+            display_df, 
+            num_rows="dynamic", 
+            use_container_width=True, 
+            hide_index=True,
+            column_config={
+                "app": st.column_config.SelectboxColumn("App", options=st.session_state.apps, help="Application concernée", required=True),
+                "env": st.column_config.SelectboxColumn("Env", options=["PROD", "PRÉPROD", "RECETTE"], help="Environnement", required=True),
+                "type": st.column_config.SelectboxColumn("Type", options=["MEP", "INCIDENT", "MAINTENANCE", "TEST", "TNR", "MORATOIRE"], help="Type d'événement", required=True),
+                "d1": st.column_config.DateColumn("Date début", format="DD/MM/YYYY", help="Date de début", required=True),
+                "d2": st.column_config.DateColumn("Date fin", format="DD/MM/YYYY", help="Date de fin", required=True),
+                "h1": st.column_config.TextColumn("H. début", help="Heure début (HH:MM)", default="00:00", max_chars=5),
+                "h2": st.column_config.TextColumn("H. fin", help="Heure fin (HH:MM)", default="23:59", max_chars=5),
+                "comment": st.column_config.TextColumn("Commentaire", help="Détails de l'événement", max_chars=1000)
+            },
+            key="ed_evts"
+        )
+        
+        # Afficher le nombre d'événements
+        nb_events = len([r for _, r in edited_evts.iterrows() if pd.notnull(r.get("app")) and pd.notnull(r.get("d1"))])
+        st.caption(f"📊 {nb_events} événement(s)")
+        
+        col1, col2, col3 = st.columns([1, 1, 3])
         with col1:
             save_btn = st.button("💾 Sauvegarder", type="primary", use_container_width=True)
+        with col2:
+            cancel_btn = st.button("↩️ Annuler", use_container_width=True)
         
         if save_btn:
-            with st.spinner("Sauvegarde en cours..."):
-                cleaned = []
-                for _, r in edited_evts.iterrows():
-                    if pd.notnull(r["app"]) and pd.notnull(r["d1"]):
-                        d2 = r["d2"] if pd.notnull(r["d2"]) else r["d1"]
-                        cleaned.append({"app": r["app"], "env": r["env"], "type": r["type"], "d1": r["d1"], "d2": d2, "h1": r.get("h1","00:00"), "h2": r.get("h2","23:59"), "comment": str(r.get("comment",""))})
-                save_events_db(cleaned)
-                st.success("✅ Événements sauvegardés avec succès !")
-                time.sleep(1)
-                del st.session_state.data_loaded
-                st.rerun()
+            # Validation
+            cleaned = []
+            errors = []
+            
+            for idx, r in edited_evts.iterrows():
+                # Vérifier que les champs obligatoires sont remplis
+                if pd.notnull(r.get("app")):
+                    ligne = idx + 1
+                    
+                    # Validation des champs obligatoires
+                    if pd.isnull(r.get("env")):
+                        errors.append(f"⚠️ Ligne {ligne}: Environnement obligatoire")
+                        continue
+                    if pd.isnull(r.get("type")):
+                        errors.append(f"⚠️ Ligne {ligne}: Type obligatoire")
+                        continue
+                    if pd.isnull(r.get("d1")):
+                        errors.append(f"⚠️ Ligne {ligne}: Date début obligatoire")
+                        continue
+                    
+                    # Date de fin par défaut = date de début
+                    d1 = r["d1"]
+                    d2 = r["d2"] if pd.notnull(r.get("d2")) else d1
+                    
+                    # Validation cohérence des dates
+                    if d2 < d1:
+                        errors.append(f"⚠️ Ligne {ligne}: Date fin avant date début")
+                        continue
+                    
+                    # Validation heures
+                    h1 = str(r.get("h1", "00:00")).strip() if pd.notnull(r.get("h1")) else "00:00"
+                    h2 = str(r.get("h2", "23:59")).strip() if pd.notnull(r.get("h2")) else "23:59"
+                    
+                    # Vérification format HH:MM basique
+                    if not (len(h1) == 5 and h1[2] == ":"):
+                        errors.append(f"⚠️ Ligne {ligne}: Format heure début invalide (attendu HH:MM)")
+                        continue
+                    if not (len(h2) == 5 and h2[2] == ":"):
+                        errors.append(f"⚠️ Ligne {ligne}: Format heure fin invalide (attendu HH:MM)")
+                        continue
+                    
+                    # Commentaire
+                    comment = str(r.get("comment", "")).strip()
+                    
+                    cleaned.append({
+                        "app": r["app"],
+                        "env": r["env"],
+                        "type": r["type"],
+                        "d1": d1,
+                        "d2": d2,
+                        "h1": h1,
+                        "h2": h2,
+                        "comment": comment
+                    })
+            
+            # Afficher les erreurs ou sauvegarder
+            if errors:
+                for err in errors:
+                    st.error(err)
+            elif not cleaned:
+                st.warning("⚠️ Aucun événement à sauvegarder")
+            else:
+                with st.spinner("Sauvegarde en cours..."):
+                    save_events_db(cleaned)
+                    st.success(f"✅ {len(cleaned)} événement(s) sauvegardé(s) avec succès !")
+                    time.sleep(1)
+                    del st.session_state.data_loaded
+                    st.rerun()
+        
+        if cancel_btn:
+            del st.session_state.data_loaded
+            st.rerun()
 
 elif st.session_state.page == "planning":
     st.title(f"📅 Planning Visuel {sel_year}")
