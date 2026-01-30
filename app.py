@@ -221,12 +221,32 @@ st.markdown("""
         z-index: 5; 
         cursor: pointer; 
     }
-    .mep { background-color: #0070C0; } 
-    .inc { background-color: #FF0000; } 
-    .mai { background-color: #FFC000; color: black; } 
-    .test { background-color: #00B050; } 
-    .tnr { background-color: #70AD47; }
-    .mor { background-color: #9600C8; }
+    
+    /* Événements multiples - bandes horizontales */
+    .multi-event {
+        display: flex;
+        flex-direction: column;
+        width: 100%;
+        height: 100%;
+        cursor: pointer;
+    }
+    .multi-event .event-band {
+        flex: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-weight: bold;
+        font-size: 9px;
+        line-height: 1;
+    }
+    
+    .mep, .bg-mep { background-color: #0070C0; } 
+    .inc, .bg-inc { background-color: #FF0000; } 
+    .mai, .bg-mai { background-color: #FFC000; color: black; } 
+    .test, .bg-test { background-color: #00B050; } 
+    .tnr, .bg-tnr { background-color: #70AD47; }
+    .mor, .bg-mor { background-color: #9600C8; }
     
     /* TOOLTIP */
     .has-tooltip { position: relative; }
@@ -257,17 +277,16 @@ st.markdown("""
     .has-tooltip .tooltip-box {
         visibility: hidden;
         opacity: 0;
-        width: 300px;
+        width: 320px;
         background-color: #1e293b;
         color: #fff;
         border-radius: 6px;
         padding: 14px;
         position: absolute;
         z-index: 9999;
-        bottom: 100%;
+        bottom: calc(100% + 8px);
         left: 50%;
         transform: translateX(-50%);
-        margin-bottom: 8px;
         box-shadow: 0 10px 25px rgba(0,0,0,0.4);
         font-size: 12px;
         text-align: left;
@@ -289,17 +308,36 @@ st.markdown("""
         visibility: visible;
         opacity: 1;
     }
-    /* Ajustement si le tooltip dépasse en haut */
-    tr:first-child .has-tooltip .tooltip-box {
+    
+    /* FIX: Tooltip vers le bas pour les 3 premières lignes d'applications */
+    tr:nth-child(-n+3) .has-tooltip .tooltip-box {
         bottom: auto;
-        top: 100%;
-        margin-top: 8px;
-        margin-bottom: 0;
+        top: calc(100% + 8px);
     }
-    tr:first-child .has-tooltip .tooltip-box::after {
+    tr:nth-child(-n+3) .has-tooltip .tooltip-box::after {
         top: auto;
         bottom: 100%;
         border-color: transparent transparent #1e293b transparent;
+    }
+    
+    /* Séparateur entre événements dans le tooltip */
+    .tooltip-separator {
+        border-top: 1px solid #475569;
+        margin: 10px 0;
+        padding-top: 10px;
+    }
+    
+    /* Badge compteur d'événements */
+    .event-count {
+        position: absolute;
+        top: 2px;
+        right: 2px;
+        background-color: rgba(0,0,0,0.5);
+        color: white;
+        font-size: 8px;
+        font-weight: bold;
+        padding: 1px 4px;
+        border-radius: 3px;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -555,13 +593,29 @@ elif st.session_state.page == "planning":
     fr_holidays = holidays.France(years=sel_year)
     tabs = st.tabs(MONTHS_FR)
 
+    # Fonction helper pour obtenir la classe CSS d'un type d'événement
+    def get_event_class(event_type):
+        t_raw = str(event_type).upper()
+        if "MEP" in t_raw:
+            return "mep"
+        elif "INC" in t_raw:
+            return "inc"
+        elif "MAI" in t_raw:
+            return "mai"
+        elif "TEST" in t_raw:
+            return "test"
+        elif "TNR" in t_raw:
+            return "tnr"
+        elif "MOR" in t_raw:
+            return "mor"
+        return "mep"
+
     for i, tab in enumerate(tabs):
         with tab:
             m = i + 1
             days_in_m = calendar.monthrange(sel_year, m)[1]
             dates_m = [date(sel_year, m, d) for d in range(1, days_in_m + 1)]
             
-            # FIX 1 : Afficher toutes les apps même sans événements
             if not st.session_state.apps:
                 st.info("Aucune application enregistrée.")
                 continue
@@ -576,11 +630,9 @@ elif st.session_state.page == "planning":
                 html += f'<th class="{th_c}">{d.day}<br>{day_l}</th>'
             html += '</tr></thead><tbody>'
 
-            # FIX 1 : Parcourir TOUTES les apps (pas seulement celles avec événements)
             for app_n in st.session_state.apps:
                 html += f'<tr><td class="app-name">{app_n}</td>'
                 
-                # FIX 3 : Pour chaque jour, vérifier si un événement couvre ce jour
                 for d in dates_m:
                     td_class = []
                     content = ""
@@ -596,53 +648,54 @@ elif st.session_state.page == "planning":
                     h_name = fr_holidays.get(d)
                     if h_name:
                         td_class.append("ferie")
-                        if d.weekday() < 5:  # Afficher emoji seulement si pas week-end
+                        if d.weekday() < 5:
                             content = "🎉"
                     
-                    # FIX 3 : Chercher un événement qui COUVRE ce jour (pas seulement qui commence ce jour)
-                    matching_event = None
+                    # NOUVEAU: Collecter TOUS les événements qui couvrent ce jour
+                    matching_events = []
                     for ev in st.session_state.events:
                         if ev["app"] == app_n and ev["env"] == env_sel:
-                            # Vérifier si le jour actuel est dans la plage de l'événement
                             if ev["d1"] <= d <= ev["d2"]:
-                                matching_event = ev
-                                break
+                                matching_events.append(ev)
                     
-                    # Si événement trouvé pour ce jour
-                    if matching_event:
-                        ev = matching_event
-                        t_raw = str(ev["type"]).upper()
-                        
-                        # Déterminer la classe CSS
-                        if "MEP" in t_raw:
-                            t_cls = "mep"
-                        elif "INC" in t_raw:
-                            t_cls = "inc"
-                        elif "MAI" in t_raw:
-                            t_cls = "mai"
-                        elif "TEST" in t_raw:
-                            t_cls = "test"
-                        elif "TNR" in t_raw:
-                            t_cls = "tnr"
-                        elif "MOR" in t_raw:
-                            t_cls = "mor"
+                    # Si des événements sont trouvés pour ce jour
+                    if matching_events:
+                        if len(matching_events) == 1:
+                            # UN SEUL événement - affichage classique
+                            ev = matching_events[0]
+                            t_cls = get_event_class(ev["type"])
+                            t_raw = str(ev["type"]).upper()
+                            content = f'<div class="event-cell {t_cls}">{t_raw[:3]}</div>'
                         else:
-                            t_cls = "mep"  # Par défaut
+                            # PLUSIEURS événements - affichage en bandes
+                            content = '<div class="multi-event">'
+                            for ev in matching_events:
+                                t_cls = get_event_class(ev["type"])
+                                t_raw = str(ev["type"]).upper()
+                                content += f'<div class="event-band bg-{t_cls}">{t_raw[:3]}</div>'
+                            content += '</div>'
                         
-                        content = f'<div class="event-cell {t_cls}">{t_raw[:3]}</div>'
-                        
-                        # Construction du tooltip
-                        dur = (ev["d2"] - ev["d1"]).days + 1
-                        comment_text = str(ev.get('comment', '-')).replace('<', '&lt;').replace('>', '&gt;')
-                        
-                        tooltip_content = f'''<div class="tooltip-box">
+                        # Construction du tooltip avec TOUS les événements
+                        tooltip_parts = []
+                        for idx, ev in enumerate(matching_events):
+                            dur = (ev["d2"] - ev["d1"]).days + 1
+                            comment_text = str(ev.get('comment', '-')).replace('<', '&lt;').replace('>', '&gt;')
+                            
+                            separator = '<div class="tooltip-separator"></div>' if idx > 0 else ''
+                            
+                            tooltip_parts.append(f'''{separator}
 <strong style="color:#60a5fa; font-size:13px; display:block; margin-bottom:8px;">📋 {ev['type']}</strong>
 <span class="tooltip-label">📱 App:</span> {ev['app']}<br>
 <span class="tooltip-label">⏰ Heures:</span> {ev.get('h1','00:00')} - {ev.get('h2','23:59')}<br>
 <span class="tooltip-label">📅 Dates:</span> {ev['d1'].strftime('%d/%m')} au {ev['d2'].strftime('%d/%m')}<br>
 <span class="tooltip-label">⏱️ Durée:</span> {dur} jour(s)<br>
-{f'<span class="tooltip-label">🎉 Férié:</span> {h_name}<br>' if h_name else ''}<span class="tooltip-label">💬 Note:</span> {comment_text if comment_text != '-' else '<i>Aucune</i>'}
-</div>'''
+<span class="tooltip-label">💬 Note:</span> {comment_text if comment_text and comment_text != '-' else '<i>Aucune</i>'}''')
+                        
+                        # Ajouter info férié si applicable
+                        if h_name:
+                            tooltip_parts.append(f'<br><span class="tooltip-label">🎉 Férié:</span> {h_name}')
+                        
+                        tooltip_content = f'''<div class="tooltip-box">{''.join(tooltip_parts)}</div>'''
                         
                         # Assemblage de la cellule avec tooltip
                         class_str = " ".join(td_class) if td_class else ""
