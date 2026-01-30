@@ -19,8 +19,16 @@ st.set_page_config(
         'About': None
     }
 )
+# ==================================================
+# Indicateur d'environnement
+# On utilise .get() pour éviter que l'app plante si la clé n'existe pas encore
+env_type = st.secrets["supabase"].get("env", "PRODUCTION")
 
+if env_type == "DEVELOPPEMENT":
+    st.sidebar.warning("⚠️ MODE DÉVELOPPEMENT")
+    st.sidebar.caption("Base : Planning-IT-DEV")
 @st.cache_resource
+# ==================================================
 def init_connection():
     try:
         url = st.secrets["supabase"]["url"]
@@ -308,6 +316,53 @@ with st.sidebar:
     years_list = [2025, 2026, 2027, 2028]
     sel_year = st.selectbox("Année", years_list, index=years_list.index(TODAY.year) if TODAY.year in years_list else 1)
     st.divider()
+    
+    # FORMULAIRE D'AJOUT RAPIDE (uniquement sur la page planning)
+    if st.session_state.page == "planning" and st.session_state.apps:
+        st.markdown("### ➕ Ajout rapide")
+        
+        with st.form("quick_add_form", clear_on_submit=True):
+            q_app = st.selectbox("📱 Application", st.session_state.apps)
+            q_env = st.selectbox("🌐 Environnement", ["PROD", "PRÉPROD", "RECETTE"])
+            q_type = st.selectbox("🏷️ Type", ["MEP", "INCIDENT", "MAINTENANCE", "TEST", "TNR", "MORATOIRE"])
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                q_d1 = st.date_input("📅 Début", value=TODAY)
+            with col2:
+                q_d2 = st.date_input("📅 Fin", value=TODAY)
+            
+            col3, col4 = st.columns(2)
+            with col3:
+                q_h1 = st.text_input("⏰ H. début", value="00:00", max_chars=5)
+            with col4:
+                q_h2 = st.text_input("⏰ H. fin", value="23:59", max_chars=5)
+            
+            q_comment = st.text_area("💬 Commentaire", placeholder="Détails...", height=80)
+            
+            submitted = st.form_submit_button("✅ Ajouter", use_container_width=True, type="primary")
+            
+            if submitted:
+                new_event = {
+                    "app": q_app,
+                    "env": q_env,
+                    "type": q_type,
+                    "d1": q_d1,
+                    "d2": q_d2,
+                    "h1": q_h1,
+                    "h2": q_h2,
+                    "comment": q_comment
+                }
+                with st.spinner("Ajout en cours..."):
+                    st.session_state.events.append(new_event)
+                    save_events_db(st.session_state.events)
+                    st.success("✅ Événement ajouté !")
+                    time.sleep(0.5)
+                    del st.session_state.data_loaded
+                    st.rerun()
+        
+        st.divider()
+    
     if st.button("🔄 Actualiser"): del st.session_state.data_loaded; st.rerun()
 
 # ==================================================
