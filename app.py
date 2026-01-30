@@ -272,52 +272,45 @@ st.markdown("""
         background: #94a3b8;
     }
     
-    /* Tooltip simple avec CSS pur */
+    /* Tooltip avec position fixed pour sortir du conteneur */
     .has-tooltip { position: relative; }
     .has-tooltip .tooltip-box {
         visibility: hidden;
         opacity: 0;
         width: 320px;
+        max-height: 400px;
+        overflow-y: auto;
         background-color: #1e293b;
         color: #fff;
         border-radius: 6px;
         padding: 14px;
-        position: absolute;
-        z-index: 9999;
-        bottom: calc(100% + 8px);
-        left: 50%;
-        transform: translateX(-50%);
-        box-shadow: 0 10px 25px rgba(0,0,0,0.4);
+        position: fixed;
+        z-index: 99999;
+        box-shadow: 0 10px 25px rgba(0,0,0,0.5);
         font-size: 12px;
         text-align: left;
         line-height: 1.7;
         pointer-events: none;
-        transition: opacity 0.2s, visibility 0.2s;
+        transition: opacity 0.15s, visibility 0.15s;
     }
-    .has-tooltip .tooltip-box::after {
-        content: "";
-        position: absolute;
-        top: 100%;
-        left: 50%;
-        margin-left: -6px;
-        border-width: 6px;
-        border-style: solid;
-        border-color: #1e293b transparent transparent transparent;
+    
+    /* Scrollbar du tooltip */
+    .has-tooltip .tooltip-box::-webkit-scrollbar {
+        width: 6px;
     }
+    .has-tooltip .tooltip-box::-webkit-scrollbar-track {
+        background: #334155;
+        border-radius: 3px;
+    }
+    .has-tooltip .tooltip-box::-webkit-scrollbar-thumb {
+        background: #64748b;
+        border-radius: 3px;
+    }
+    
     .has-tooltip:hover .tooltip-box {
         visibility: visible;
         opacity: 1;
-    }
-    
-    /* FIX: Tooltip vers le bas pour les 3 premières lignes d'applications */
-    tr:nth-child(-n+3) .has-tooltip .tooltip-box {
-        bottom: auto;
-        top: calc(100% + 8px);
-    }
-    tr:nth-child(-n+3) .has-tooltip .tooltip-box::after {
-        top: auto;
-        bottom: 100%;
-        border-color: transparent transparent #1e293b transparent;
+        pointer-events: auto;
     }
     
     /* Séparateur entre événements dans le tooltip */
@@ -340,6 +333,65 @@ st.markdown("""
         border-radius: 3px;
     }
 </style>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Fonction pour positionner les tooltips
+    function setupTooltips() {
+        const cells = document.querySelectorAll('.has-tooltip');
+        
+        cells.forEach(cell => {
+            const tooltip = cell.querySelector('.tooltip-box');
+            if (!tooltip) return;
+            
+            cell.addEventListener('mouseenter', function(e) {
+                const rect = cell.getBoundingClientRect();
+                const tooltipRect = tooltip.getBoundingClientRect();
+                const viewportHeight = window.innerHeight;
+                const viewportWidth = window.innerWidth;
+                
+                // Position horizontale - centré sur la cellule
+                let left = rect.left + rect.width / 2 - 160; // 160 = moitié de 320px
+                
+                // Ajuster si dépasse à droite
+                if (left + 320 > viewportWidth - 10) {
+                    left = viewportWidth - 330;
+                }
+                // Ajuster si dépasse à gauche
+                if (left < 10) {
+                    left = 10;
+                }
+                
+                // Position verticale - au-dessus par défaut
+                let top = rect.top - tooltip.offsetHeight - 10;
+                
+                // Si pas assez de place en haut, mettre en bas
+                if (top < 10) {
+                    top = rect.bottom + 10;
+                }
+                
+                // Si toujours pas assez de place (en bas), centrer verticalement
+                if (top + tooltip.offsetHeight > viewportHeight - 10) {
+                    top = Math.max(10, (viewportHeight - tooltip.offsetHeight) / 2);
+                }
+                
+                tooltip.style.left = left + 'px';
+                tooltip.style.top = top + 'px';
+            });
+        });
+    }
+    
+    // Setup initial et après chaque changement Streamlit
+    setupTooltips();
+    
+    // Observer les changements du DOM pour les tabs Streamlit
+    const observer = new MutationObserver(function(mutations) {
+        setupTooltips();
+    });
+    
+    observer.observe(document.body, { childList: true, subtree: true });
+});
+</script>
 """, unsafe_allow_html=True)
 
 # ==================================================
